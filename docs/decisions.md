@@ -14,4 +14,16 @@
 - **Recommendation lifecycle:** open recs are deduped by `dedupe_key`; dismissed/done ones are not re-raised for 7 days; rules never auto-close a rec.
 - **Rollup bounds:** `compute_uptime_rollup` recomputes whole hourly buckets from raw samples, so it is idempotent; raw purge never touches rollups.
 - **Collector `serve` runs one cycle at start**, then every `COLLECT_INTERVAL_SECONDS` (max 1 instance, coalesced).
+- **Admins have no access to other users' data** (they manage users and see collector runs); they can still use the app for their own accounts.
+- **Viewer = read-only on own data.** Writer roles (admin, user) pass `require_writer`; viewers get 403 on writes.
+- **App factory:** `uvicorn app.main:create_app --factory`, so tests build the app with explicit settings/session factory/adapters.
+- **Account creation = account + first discovery in one transaction**; if the provider can't be reached, nothing is saved (502). Metrics arrive via collect-now or the next collector cycle.
+- **Deleting an account soft-deletes its resources too** so tombstones reach every client; the client cascades to incidents, alerts, rollups and samples.
+- **Sync pages use the global `version`** (not per-table), clients re-read `cursor - 500`; samples are thinned to 15-minute points and limited to cpu/memory/disk/availability for the browser cache.
+- **Added two agent tools beyond the spec list**: `list_resources` (the model must discover ids/names) and `get_fleet_uptime` (answers "most downtime" without N calls). All tools accept id or exact name and are owner-scoped.
+- **No LLM narrative on digests** (optional in the spec): digests are deterministic.
+- **In-memory rate limiting** (per process, per user): fine for a single API instance; use a shared store if the API is scaled out.
+- **Chat holds a DB session for the request** (auth dependency); acceptable at this scale, noted for the pooler.
+- **Tests are hermetic**: `conftest.py` blanks `GENERATOR_API_KEY`, `GOOGLE_API_KEY` etc. so a developer's `.env` never leaks into test runs.
+- **Backups via Git Bash/Docker**: `scripts/*.sh` set `MSYS_NO_PATHCONV=1` for Windows.
 - **Phase-by-phase delivery**, pausing after each phase for review.

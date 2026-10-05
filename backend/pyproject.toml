@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "syncviewer-backend"
 version = "0.1.0"
@@ -14,11 +18,11 @@ dependencies = [
   "cryptography>=42",
   "pyjwt[crypto]>=2.8",
   "python-dotenv>=1.0",
+  "google-adk>=1.0",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.5"]
-agent = ["google-adk"]
+dev = ["pytest>=8", "ruff>=0.5", "pgembed"]
 
 [tool.ruff]
 line-length = 100
@@ -30,3 +34,6 @@ ignore = ["B008"]  # FastAPI idiom: Depends()/Query() in argument defaults
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
