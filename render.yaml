@@ -1,0 +1,20 @@
+# Render blueprint for the API (Docker image built from this repo). Fill the secrets in the dashboard.
+services:
+  - type: web
+    name: syncviewer-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - { key: APP_ENV, value: production }
+      - { key: DATABASE_URL, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_JWKS_URL, sync: false }
+      - { key: CREDENTIAL_ENCRYPTION_KEY, sync: false }
+      - { key: CORS_ORIGINS, sync: false }
+      - { key: ADMIN_EMAILS, sync: false }
+      - { key: GENERATOR_URL, sync: false }
+      - { key: GENERATOR_API_KEY, sync: false }
+      - { key: GOOGLE_API_KEY, sync: false }
+      - { key: GEMINI_MODEL, value: gemini-2.5-flash }
