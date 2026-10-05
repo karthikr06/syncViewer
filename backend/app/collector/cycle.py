@@ -17,11 +17,12 @@ from app.collector.dto import AccountRef
 from app.core.config import Settings
 from app.core.crypto import decrypt_credentials
 from app.repositories import accounts as account_repo
+from app.repositories import insights as insight_repo
 from app.repositories import lookups
 from app.repositories import resources as resource_repo
 from app.repositories import runs as run_repo
 from app.repositories import samples as sample_repo
-from app.services import alert_eval, incidents, recommendations
+from app.services import alert_eval, digests, incidents, recommendations
 
 log = logging.getLogger("collector")
 
@@ -87,6 +88,20 @@ def process_account(session: Session, account_id: uuid.UUID, provider_code: str,
     return inserted
 
 
+def _digests(session_factory: sessionmaker[Session], now: datetime) -> None:
+    """Daily/weekly digests per owner; failures are logged, never fatal to the cycle."""
+    with session_factory() as s:
+        owners = insight_repo.owner_ids_with_accounts(s)
+    for owner in owners:
+        with session_factory() as s:
+            try:
+                digests.ensure_periodic(s, owner, now)
+                s.commit()
+            except Exception:  # noqa: BLE001
+                s.rollback()
+                log.exception("digest generation failed for %s", owner)
+
+
 def run_cycle(
     session_factory: sessionmaker[Session],
     settings: Settings,
@@ -129,6 +144,9 @@ def run_cycle(
                 session.rollback()
         finally:
             session.close()
+
+    if result.accounts_processed:
+        _digests(session_factory, now)
 
     with session_factory() as s:
         purged = sample_repo.purge_older_than(

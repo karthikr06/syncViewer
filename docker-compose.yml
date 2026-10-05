@@ -1,33 +1,50 @@
 services:
   generator:
     build: ./generator
+    image: ${DOCKERHUB_USER:-local}/syncviewer-generator:${TAG:-latest}
     env_file: .env
     ports: ["8100:8100"]
+    restart: unless-stopped
 
   # one-shot: applies Alembic migrations to the database in .env, then exits
   migrate:
     build: ./backend
+    image: ${DOCKERHUB_USER:-local}/syncviewer-backend:${TAG:-latest}
     env_file: .env
     command: ["alembic", "upgrade", "head"]
 
   api:
-    build: ./backend
+    image: ${DOCKERHUB_USER:-local}/syncviewer-backend:${TAG:-latest}
     env_file: .env
     environment:
       GENERATOR_URL: http://generator:8100
     ports: ["8000:8000"]
+    restart: unless-stopped
     depends_on:
       migrate: { condition: service_completed_successfully }
       generator: { condition: service_started }
 
   collector:
-    build: ./backend
+    image: ${DOCKERHUB_USER:-local}/syncviewer-backend:${TAG:-latest}
     env_file: .env
     environment:
       GENERATOR_URL: http://generator:8100
     command: ["python", "-m", "app.collector.serve"]
+    restart: unless-stopped
     depends_on:
       migrate: { condition: service_completed_successfully }
       generator: { condition: service_started }
 
-  # frontend service is added in Phase 5
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    image: ${DOCKERHUB_USER:-local}/syncviewer-frontend:${TAG:-latest}
+    environment:
+      # allow the browser to call Supabase (login) and the API
+      CSP_CONNECT_SRC: "'self' ${VITE_SUPABASE_URL} ${VITE_API_URL:-http://localhost:8000}"
+    ports: ["8080:80"]
+    restart: unless-stopped

@@ -15,9 +15,10 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, VersionMixin
+from app.models.metrics import MetricDefinition
 
 
 class AlertRule(Base, VersionMixin, TimestampMixin):
@@ -49,6 +50,12 @@ class AlertRule(Base, VersionMixin, TimestampMixin):
     severity: Mapped[str] = mapped_column(String(10), nullable=False, server_default="warning")
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    metric_def: Mapped[MetricDefinition] = relationship(lazy="joined")
+
+    @property
+    def metric(self) -> str:
+        return self.metric_def.code
 
 
 class Alert(Base, VersionMixin):

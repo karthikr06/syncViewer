@@ -14,9 +14,10 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, VersionMixin
+from app.models.identity import Provider
 
 
 class CloudAccount(Base, VersionMixin, TimestampMixin):
@@ -39,6 +40,12 @@ class CloudAccount(Base, VersionMixin, TimestampMixin):
     last_collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    provider: Mapped[Provider] = relationship(lazy="joined")
+
+    @property
+    def provider_code(self) -> str:
+        return self.provider.code
 
 
 class ResourceType(Base):
