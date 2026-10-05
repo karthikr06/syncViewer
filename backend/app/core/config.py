@@ -45,6 +45,8 @@ class Settings:
     google_api_key: str
     gemini_model: str
     migration_database_url: str = field(default="")
+    supabase_url: str = field(default="")
+    sync_overlap: int = field(default=500)
 
     @property
     def is_production(self) -> bool:
@@ -68,6 +70,7 @@ def load_settings(required: list[str] | None = None) -> Settings:
         app_env=env("APP_ENV", "development"),
         database_url=normalize_db_url(env("DATABASE_URL", "")),
         migration_database_url=normalize_db_url(env("MIGRATION_DATABASE_URL", "")),
+        supabase_url=env("SUPABASE_URL", "").rstrip("/"),
         supabase_jwks_url=env("SUPABASE_JWKS_URL", ""),
         supabase_jwt_secret=env("SUPABASE_JWT_SECRET", ""),
         cors_origins=_split(env("CORS_ORIGINS", "")),

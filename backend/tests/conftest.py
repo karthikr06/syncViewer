@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import uuid
@@ -10,6 +11,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from alembic import command
+
+# Hermetic tests: values already present in the environment win over the repo-root .env
+# (load_dotenv never overrides), so a developer's real keys can't leak into test runs.
+for _name, _value in {"GENERATOR_API_KEY": "", "GOOGLE_API_KEY": "", "APP_ENV": "development",
+                      "ADMIN_EMAILS": "", "CORS_ORIGINS": ""}.items():
+    os.environ[_name] = _value
 
 BACKEND = Path(__file__).resolve().parent.parent
 # the generator is a standalone project; tests import it as an in-process fake cloud
