@@ -1,0 +1,33 @@
+services:
+  generator:
+    build: ./generator
+    env_file: .env
+    ports: ["8100:8100"]
+
+  # one-shot: applies Alembic migrations to the database in .env, then exits
+  migrate:
+    build: ./backend
+    env_file: .env
+    command: ["alembic", "upgrade", "head"]
+
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      GENERATOR_URL: http://generator:8100
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      generator: { condition: service_started }
+
+  collector:
+    build: ./backend
+    env_file: .env
+    environment:
+      GENERATOR_URL: http://generator:8100
+    command: ["python", "-m", "app.collector.serve"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      generator: { condition: service_started }
+
+  # frontend service is added in Phase 5
