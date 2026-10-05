@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*service-account*.json
+*.p12
+
+# Local DB / backups
+*.db
+*.sqlite
+*.dump
+backups/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/dev-dev-dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
