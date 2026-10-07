@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ago } from "../lib/format";
@@ -19,7 +20,12 @@ const NAV = [
 function SyncBadge() {
   const s = useSyncStatus();
   if (s.state === "syncing") return <Badge tone="blue">syncing…</Badge>;
-  if (s.state === "offline") return <Badge tone="amber">offline, showing cached data</Badge>;
+  if (s.state === "offline")
+    return (
+      <Badge tone="amber">
+        {navigator.onLine ? "server unreachable" : "offline"}, showing cached data
+      </Badge>
+    );
   if (s.state === "error")
     return (
       <button onClick={requestSync} title={s.error ?? ""}>
@@ -61,6 +67,9 @@ export function Layout() {
         </nav>
         <div className="hidden px-4 py-4 md:block">
           {role && <Badge tone="gray">{role}</Badge>}
+          <NavLink className="mt-3 block text-sm text-slate-500 hover:underline" to="/account/password">
+            Change password
+          </NavLink>
           <button className="btn-ghost mt-3 w-full" onClick={() => void logout()}>
             Sign out
           </button>
@@ -84,7 +93,9 @@ export function Layout() {
         )}
         <main className="mx-auto max-w-6xl p-4">
           <ErrorBoundary resetKey={loc.pathname}>
-            <Outlet />
+            <Suspense fallback={<p className="text-slate-500">Loading…</p>}>
+              <Outlet />
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>

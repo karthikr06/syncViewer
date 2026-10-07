@@ -49,7 +49,10 @@ export function Dashboard() {
   const names = new Map(resources.map((r) => [r.id, r.name]));
   const running = resources.filter((r) => r.power_state === "running").length;
   const openIncidents = incidents.filter((i) => !i.ended_at).length;
-  const latest = [...incidents].sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 6);
+  // ongoing outages first (however old), then the most recent resolved ones
+  const latest = [...incidents]
+    .sort((a, b) => (a.ended_at ? 1 : 0) - (b.ended_at ? 1 : 0) || b.started_at.localeCompare(a.started_at))
+    .slice(0, 6);
   const topRecs = [...recs]
     .sort((a, b) => ["critical", "warning", "info"].indexOf(a.severity) - ["critical", "warning", "info"].indexOf(b.severity))
     .slice(0, 5);

@@ -2,6 +2,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import { canWrite, useAuth, useDb } from "../auth/AuthProvider";
 import { Badge, Empty, ErrorNote, PageHeader } from "../components/ui";
 import { api, friendlyError } from "../lib/api";
@@ -13,8 +14,10 @@ import { RecommendationCard } from "./Recommendations";
 /** Model/cloud-sourced text is untrusted: markdown is rendered without raw HTML and sanitized. */
 function Md({ children }: { children: string }) {
   return (
-    <div className="prose-sm space-y-2 text-sm [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_table]:w-full [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:text-left">
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{children}</ReactMarkdown>
+    <div className="prose-sm space-y-2 text-sm [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_ol>li]:list-decimal [&_code]:rounded [&_code]:bg-slate-500/15 [&_code]:px-1 [&_strong]:font-semibold [&_table]:w-full [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:text-left">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+        {children}
+      </ReactMarkdown>
     </div>
   );
 }

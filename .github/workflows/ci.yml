@@ -74,6 +74,7 @@ jobs:
             VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}
             VITE_API_URL=${{ vars.VITE_API_URL }}
+            VITE_ENABLE_GOOGLE_AUTH=${{ vars.VITE_ENABLE_GOOGLE_AUTH || 'false' }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/syncviewer-frontend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/syncviewer-frontend:${{ steps.meta.outputs.tag }}
