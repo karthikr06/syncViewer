@@ -316,3 +316,34 @@ def test_digest_generation_and_chat_without_key(env):
     assert env.client.get("/api/v1/insights/digests", headers=h).json()["total"] == 1
     chat = env.client.post("/api/v1/agent/chat", headers=h, json={"message": "hi"}).json()
     assert chat["configured"] is False and "not configured" in chat["reply"]
+
+
+
+def test_writes_commit_before_the_response_is_sent(env):
+    """FastAPI runs a yield dependency's exit code after the response is sent unless its scope
+    is "function"; get_db commits there, so with the default scope a client could read stale
+    data right after a write (seen against a remote database) or get 2xx for a failed commit."""
+    from sqlalchemy.orm import Session
+
+    events: list[str] = []
+
+    class RecordingSession(Session):
+        def commit(self):
+            super().commit()
+            events.append("commit")
+
+    inner = env.client.app
+    inner.state.session_factory.class_ = RecordingSession
+
+    async def recording_app(scope, receive, send):
+        async def tap(message):
+            if message["type"] == "http.response.start":
+                events.append("response")
+            await send(message)
+        await inner(scope, receive, tap)
+
+    client = TestClient(recording_app)
+    r = client.post("/api/v1/alert-rules", headers=auth(),
+                    json={"name": "x", "metric": "cpu_percent", "operator": ">", "threshold": 1})
+    assert r.status_code == 201
+    assert "commit" in events and events.index("commit") < events.index("response")

@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.agent.runner import run_chat
 from app.api.deps import (
+    DB,
     CurrentUser,
     current_user,
     current_user_detached,
-    get_db,
     get_settings,
     rate_limited,
     require_writer,
@@ -24,14 +24,14 @@ router = APIRouter(tags=["insights"])
 
 @router.get("/insights/digests", response_model=Page[DigestOut])
 def list_digests(page: int = 1, page_size: int = Query(25, ge=1, le=100),
-                 user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+                 user: CurrentUser = Depends(current_user), db: Session = DB):
     items, total, page, page_size = repo.list_digests(db, user.id, page, page_size)
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("/insights/digests/generate", response_model=DigestOut, status_code=201)
 def generate_digest(days: int = Query(7, ge=1, le=30),
-                    user: CurrentUser = Depends(require_writer), db: Session = Depends(get_db)):
+                    user: CurrentUser = Depends(require_writer), db: Session = DB):
     return digests.generate(db, user.id, datetime.now(UTC), days)
 
 

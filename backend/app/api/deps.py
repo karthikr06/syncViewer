@@ -33,6 +33,13 @@ def get_db(request: Request) -> Iterator[Session]:
         session.close()
 
 
+# scope="function": the commit above runs BEFORE the response is sent. With the default scope
+# FastAPI sends the response first, so a client could read stale data right after a write
+# (or get a 2xx for a write whose commit then failed). Use `db: Session = DB` everywhere so
+# auth and the route share one session -- the audit context is set on that transaction.
+DB = Depends(get_db, scope="function")
+
+
 @dataclass(frozen=True)
 class CurrentUser:
     id: uuid.UUID
@@ -46,7 +53,7 @@ class CurrentUser:
 
 def current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
-    db: Session = Depends(get_db),
+    db: Session = DB,
     settings: Settings = Depends(get_settings),
 ) -> CurrentUser:
     if creds is None:

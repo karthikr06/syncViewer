@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentUser, current_user, get_db
+from app.api.deps import DB, CurrentUser, current_user
 from app.repositories import sync as repo
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -33,7 +33,7 @@ def _page(db: Session, owner, entity: str, since: int, limit: int, now: datetime
 
 @router.get("/changes")
 def changes(entity: Entity, since: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=1000),
-            user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+            user: CurrentUser = Depends(current_user), db: Session = DB):
     """Rows with version > since, oldest version first, tombstones included. Clients send
     `cursor - overlap` as `since` and upsert idempotently (see docs/architecture.md)."""
     now = datetime.now(UTC)
@@ -42,7 +42,7 @@ def changes(entity: Entity, since: int = Query(0, ge=0), limit: int = Query(500,
 
 @router.get("/bootstrap")
 def bootstrap(limit: int = Query(500, ge=1, le=1000), user: CurrentUser = Depends(current_user),
-              db: Session = Depends(get_db)):
+              db: Session = DB):
     """First page of every entity in one round trip; clients continue with /sync/changes."""
     now = datetime.now(UTC)
     return {
@@ -55,7 +55,7 @@ def bootstrap(limit: int = Query(500, ge=1, le=1000), user: CurrentUser = Depend
 @router.get("/metrics")
 def metrics(since: datetime | None = None, window: int = Query(24, ge=1, le=MAX_WINDOW_HOURS),
             step: int = Query(300, ge=300, le=3600), limit: int = Query(20000, ge=1, le=50000),
-            user: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+            user: CurrentUser = Depends(current_user), db: Session = DB):
     """Recent samples for cpu/memory/disk/availability. `since` (ISO) is inclusive; without it
     the last `window` hours are returned. Clients re-request from `cursor - 10 min`."""
     now = datetime.now(UTC)
