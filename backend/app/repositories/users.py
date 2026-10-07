@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models import Role, User
 
@@ -12,6 +12,22 @@ ROLE_IDS = {"admin": 1, "user": 2, "viewer": 3}
 
 def get(session: Session, user_id: uuid.UUID) -> User | None:
     return session.get(User, user_id)
+
+
+def get_for_request(session: Session, user_id: uuid.UUID) -> User | None:
+    """The user with their role AND the audit context for this transaction, in one round trip
+    (each round trip to a remote database costs 100+ ms). Returns None for a first login, in
+    which case the caller provisions the user and sets the audit context itself."""
+    row = session.execute(
+        select(User, func.set_config("app.user_id", str(user_id), True))
+        .options(joinedload(User.role))
+        .where(User.id == user_id)
+    ).first()
+    return row[0] if row else None
+
+
+def set_audit_user(session: Session, user_id: uuid.UUID) -> None:
+    session.execute(select(func.set_config("app.user_id", str(user_id), True)))
 
 
 def provision(session: Session, user_id: uuid.UUID, email: str, role_id: int) -> User:

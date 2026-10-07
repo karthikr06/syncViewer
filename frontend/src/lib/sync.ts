@@ -149,8 +149,9 @@ export function syncOnce(db: LocalDb): Promise<void> {
   running = (async () => {
     setSyncStatus({ state: "syncing" });
     try {
-      for (const entity of ENTITIES) await pullEntity(db, entity);
-      await pullSamples(db);
+      // entities are independent (tombstones are idempotent and the server soft-deletes children
+      // with their parent), so pull them concurrently: one round trip of latency, not nine
+      await Promise.all([...ENTITIES.map((entity) => pullEntity(db, entity)), pullSamples(db)]);
       const at = Date.now();
       await setState(db, "last_sync", at);
       setSyncStatus({ state: "idle", lastSync: at, error: null });

@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -63,19 +62,19 @@ def current_user(
         raise HTTPException(401, "invalid token subject") from exc
 
     now = datetime.now(UTC)
-    user = user_repo.get(db, user_id)
+    # also sets app.user_id for this transaction: audit triggers record who made the change
+    user = user_repo.get_for_request(db, user_id)
     if user is None:
         email = str(claims.get("email", "")).lower()
         if not email:
             raise HTTPException(401, "token has no email claim")
         role = "admin" if email in settings.admin_emails else "user"
         user = user_repo.provision(db, user_id, email, user_repo.ROLE_IDS[role])
+        user_repo.set_audit_user(db, user.id)
     if not user.is_active:
         raise HTTPException(403, "This account has been deactivated.")
     if user.last_login_at is None or now - user.last_login_at > LOGIN_TOUCH_INTERVAL:
         user_repo.touch_login(user, now)
-    # audit triggers record who made the change
-    db.execute(select(func.set_config("app.user_id", str(user.id), True)))
     return CurrentUser(user.id, user.email, user.role.name)
 
 
