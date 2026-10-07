@@ -92,6 +92,25 @@ def get_metric_stats(tool_context: ToolContext, resource: str, metric: str, days
     return _call(tool_context, impl.get_metric_stats, resource, metric, days)
 
 
+def compare_metric(tool_context: ToolContext, metric: str, days: int = 7) -> dict:
+    """Compare one metric across ALL VMs in a single call (avg, min, p95, max, range, trend),
+    highest p95 first. Use this instead of calling get_metric_stats once per VM, e.g. for
+    'which VM uses the most memory' or 'which VM looks like a memory leak'.
+
+    Args:
+        metric: one of availability, cpu_percent, memory_percent, disk_used_percent,
+            network_in_bytes, network_out_bytes.
+        days: look-back window in days (1-14).
+    """
+    return _call(tool_context, impl.compare_metric, metric, days)
+
+
+def forecast_fleet_disk(tool_context: ToolContext) -> dict:
+    """Disk-full forecast for ALL VMs in one call; the ones filling up come first, soonest first.
+    Use this for 'which VM will run out of disk first'."""
+    return _call(tool_context, impl.forecast_fleet_disk)
+
+
 def find_anomalies(tool_context: ToolContext, resource: str, metric: str, days: int = 3) -> dict:
     """Find unusual spikes or drops in a metric (EWMA z-score computed in code).
 
@@ -144,6 +163,8 @@ def save_recommendation(tool_context: ToolContext, resource: str, category: str,
     """
     import json
 
+    if tool_context.state.get("role") not in ("admin", "user"):
+        return {"error": "read-only account: viewers cannot save recommendations"}
     try:
         evidence = json.loads(evidence_json or "{}")
         if not isinstance(evidence, dict):
@@ -155,6 +176,8 @@ def save_recommendation(tool_context: ToolContext, resource: str, category: str,
 
 
 ANALYST_TOOLS = [list_resources, get_resource_config, get_uptime_summary, get_fleet_uptime,
-                 list_incidents, get_metric_stats, find_anomalies]
+                 list_incidents, get_metric_stats, compare_metric, find_anomalies,
+                 list_recommendations]
 ADVISOR_TOOLS = [list_resources, get_resource_config, find_underused_resources,
-                 get_metric_stats, forecast_disk_full, list_recommendations, save_recommendation]
+                 get_metric_stats, compare_metric, forecast_disk_full, forecast_fleet_disk,
+                 list_recommendations, save_recommendation]

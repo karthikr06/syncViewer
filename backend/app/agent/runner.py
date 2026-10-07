@@ -16,15 +16,29 @@ APP_NAME = "syncviewer"
 NOT_CONFIGURED = ("The AI assistant is not configured on this server (no GOOGLE_API_KEY). "
                   "Digests and rule-based recommendations still work.")
 FAILED = "Sorry, the assistant ran into a problem. Please try again in a moment."
+BUSY = "The AI assistant is busy or rate-limited right now. Please try again in a minute."
+TIMEOUT_SECONDS = 120
 
 _lock = threading.Lock()
 _state: dict = {}
 
 
+def _loop() -> asyncio.AbstractEventLoop:
+    """One long-lived event loop in a daemon thread. ADK/genai keep async HTTP clients bound to
+    the loop that created them, so a fresh `asyncio.run` per request would break the second call."""
+    with _lock:
+        loop = _state.get("loop")
+        if loop is None or loop.is_closed():
+            loop = asyncio.new_event_loop()
+            threading.Thread(target=loop.run_forever, name="adk-loop", daemon=True).start()
+            _state["loop"] = loop
+        return loop
+
+
 def _runtime(session_factory: sessionmaker[Session], settings: Settings):
     """Build the ADK pieces once per process (agents and in-memory sessions are reusable)."""
     with _lock:
-        if not _state:
+        if "runner" not in _state:
             from google.adk.runners import Runner
             from google.adk.sessions import InMemorySessionService
 
@@ -39,14 +53,14 @@ def _runtime(session_factory: sessionmaker[Session], settings: Settings):
         return _state["service"], _state["runner"]
 
 
-async def _chat(service, runner, owner: str, session_id: str, message: str):
+async def _chat(service, runner, owner: str, role: str, session_id: str, message: str):
     from google.genai import types
 
     session = await service.get_session(app_name=APP_NAME, user_id=owner, session_id=session_id)
     if session is None:
-        # owner_id is set here from the authenticated request, never from model output
+        # owner_id and role come from the authenticated request, never from model output
         await service.create_session(app_name=APP_NAME, user_id=owner, session_id=session_id,
-                                     state={"owner_id": owner})
+                                     state={"owner_id": owner, "role": role})
     content = types.Content(role="user", parts=[types.Part(text=message)])
     reply, tools, tokens_in, tokens_out = [], [], 0, 0
     async for event in runner.run_async(user_id=owner, session_id=session_id, new_message=content):
@@ -72,18 +86,30 @@ def _log_run(factory: sessionmaker[Session], owner: uuid.UUID, model: str, tools
         log.exception("could not record agent run")
 
 
+def _is_quota_error(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__} {exc}"
+    return any(s in text for s in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"))
+
+
 def run_chat(session_factory: sessionmaker[Session], settings: Settings, owner_id: uuid.UUID,
-             message: str, session_id: str | None) -> ChatResponse:
+             message: str, session_id: str | None, role: str = "user") -> ChatResponse:
     sid = session_id or uuid.uuid4().hex
     if not settings.google_api_key:
         return ChatResponse(reply=NOT_CONFIGURED, session_id=sid, configured=False)
     started = time.monotonic()
     try:
         service, runner = _runtime(session_factory, settings)
-        text, tools, tin, tout = asyncio.run(_chat(service, runner, str(owner_id), sid, message))
-    except Exception:  # noqa: BLE001
+        future = asyncio.run_coroutine_threadsafe(
+            _chat(service, runner, str(owner_id), role, sid, message), _loop())
+        try:
+            text, tools, tin, tout = future.result(timeout=TIMEOUT_SECONDS)
+        except TimeoutError:
+            future.cancel()
+            raise
+    except Exception as exc:  # noqa: BLE001
         log.exception("agent run failed")
         _log_run(session_factory, owner_id, settings.gemini_model, [], 0, 0, started, "error")
-        return ChatResponse(reply=FAILED, session_id=sid, configured=True)
+        return ChatResponse(reply=BUSY if _is_quota_error(exc) else FAILED, session_id=sid,
+                            configured=True)
     _log_run(session_factory, owner_id, settings.gemini_model, tools, tin, tout, started, "ok")
     return ChatResponse(reply=text or FAILED, session_id=sid, configured=True, tools_called=tools)
