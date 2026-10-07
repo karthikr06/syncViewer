@@ -81,7 +81,7 @@ def load_settings(required: list[str] | None = None) -> Settings:
         generator_url=env("GENERATOR_URL", "http://generator:8100"),
         generator_api_key=env("GENERATOR_API_KEY", ""),
         google_api_key=env("GOOGLE_API_KEY", ""),
-        gemini_model=env("GEMINI_MODEL", "gemini-2.5-flash"),
+        gemini_model=env("GEMINI_MODEL", "gemini-3.5-flash-lite"),
     )
 
 

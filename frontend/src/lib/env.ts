@@ -5,6 +5,8 @@ export const env = {
   supabaseAnonKey: (e.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "",
   apiUrl: ((e.VITE_API_URL as string | undefined) ?? "http://localhost:8000").replace(/\/$/, ""),
   syncIntervalMs: Number(e.VITE_SYNC_INTERVAL_MS ?? 30_000),
+  /** show "Continue with Google" only once the provider is enabled in Supabase */
+  googleAuth: e.VITE_ENABLE_GOOGLE_AUTH === "true",
 };
 
 export const missingConfig: string[] = [

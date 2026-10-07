@@ -3,7 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api, setAuthRejectedHandler } from "../lib/api";
-import { deleteLocalDatabase, getState, LocalDb, setState } from "../lib/db";
+import { deleteLocalDatabase, deleteOtherUsersDatabases, getState, LocalDb, setState } from "../lib/db";
 import { supabase } from "../lib/supabase";
 import { startSync } from "../lib/sync";
 import type { Me, Role } from "../lib/types";
@@ -127,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     userRef.current = user.id;
     rememberUser(user);
+    void deleteOtherUsersDatabases(user.id);
     const local = new LocalDb(user.id);
     setDb(local);
     let stop: (() => void) | undefined;

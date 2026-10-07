@@ -27,7 +27,10 @@ function RuleEditor({ onDone }: { onDone: () => void }) {
   const db = useDb();
   const [error, setError] = useState<string | null>(null);
   const targets = useLiveQuery(
-    async () => ({ accounts: await db.cloud_accounts.toArray(), resources: await db.resources.toArray() }),
+    async () => ({
+      accounts: await db.cloud_accounts.toArray(),
+      resources: (await db.resources.toArray()).sort((a, b) => a.name.localeCompare(b.name)),
+    }),
     [db],
   );
   const {

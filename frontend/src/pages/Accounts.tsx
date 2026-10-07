@@ -65,7 +65,7 @@ function AddAccount({ onDone }: { onDone: () => void }) {
           <select className="input" {...register("scenario")}>
             <option value="small">Small (5 VMs)</option>
             <option value="medium">Medium (25 VMs)</option>
-            <option value="large">Large (300 VMs)</option>
+            <option value="large">Large (300 VMs, load testing: too big for a free database)</option>
           </select>
         </Field>
       )}
@@ -121,7 +121,12 @@ export function Accounts() {
       <ErrorNote message={error} />
       {note && <p className="mb-2 text-sm text-emerald-700 dark:text-emerald-400">{note}</p>}
       {data.accounts.length === 0 ? (
-        <Empty>No accounts yet.{writer ? " Add a demo account to see SyncViewer in action." : ""}</Empty>
+        <Empty>
+          No accounts yet.
+          {writer
+            ? " Add a demo account to see SyncViewer in action."
+            : " Your access is read-only, so you can't add accounts. Ask an admin to change your role."}
+        </Empty>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.accounts.map((a) => (

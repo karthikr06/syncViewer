@@ -38,11 +38,12 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     build: {
+      chunkSizeWarningLimit: 600, // recharts alone is ~520 kB; it is lazy-loaded with its pages
       rollupOptions: {
         output: {
           manualChunks: {
             charts: ["recharts"],
-            markdown: ["react-markdown", "rehype-sanitize"],
+            markdown: ["react-markdown", "rehype-sanitize", "remark-gfm"],
             data: ["dexie", "dexie-react-hooks", "@supabase/supabase-js"],
           },
         },
