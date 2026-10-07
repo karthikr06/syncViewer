@@ -79,6 +79,26 @@ def current_user(
     return CurrentUser(user.id, user.email, user.role.name)
 
 
+def current_user_detached(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+    settings: Settings = Depends(get_settings),
+) -> CurrentUser:
+    """Authenticate in a short transaction of its own, for slow endpoints (agent chat) that must
+    not keep a pooled connection -- a real server connection behind Supabase's transaction-mode
+    pooler -- open while they wait on something else."""
+    session = request.app.state.session_factory()
+    try:
+        user = current_user(creds, session, settings)
+        session.commit()
+        return user
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def require_writer(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     if not user.can_write:
         raise HTTPException(403, "Your role is read-only.")
@@ -91,10 +111,10 @@ def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     return user
 
 
-def rate_limited(limiter_attr: str) -> Callable:
+def rate_limited(limiter_attr: str, auth: Callable = current_user) -> Callable:
     """Dependency factory: limiter lives on app.state so tests can reset it."""
 
-    def dep(request: Request, user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    def dep(request: Request, user: CurrentUser = Depends(auth)) -> CurrentUser:
         limiter: RateLimiter = getattr(request.app.state, limiter_attr)
         limiter.check(str(user.id))
         return user

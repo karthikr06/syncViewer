@@ -7,6 +7,7 @@ from app.agent.runner import run_chat
 from app.api.deps import (
     CurrentUser,
     current_user,
+    current_user_detached,
     get_db,
     get_settings,
     rate_limited,
@@ -36,8 +37,8 @@ def generate_digest(days: int = Query(7, ge=1, le=30),
 
 @router.post("/agent/chat", response_model=ChatResponse)
 def chat(body: ChatRequest, request: Request,
-         user: CurrentUser = Depends(rate_limited("chat_limiter")),
+         user: CurrentUser = Depends(rate_limited("chat_limiter", current_user_detached)),
          settings: Settings = Depends(get_settings)):
     # no DB session held while waiting on the model; tools open short sessions of their own
     return run_chat(request.app.state.session_factory, settings, user.id, body.message,
-                    body.session_id)
+                    body.session_id, user.role)
