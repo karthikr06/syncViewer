@@ -23,7 +23,16 @@
 - **Added two agent tools beyond the spec list**: `list_resources` (the model must discover ids/names) and `get_fleet_uptime` (answers "most downtime" without N calls). All tools accept id or exact name and are owner-scoped.
 - **No LLM narrative on digests** (optional in the spec): digests are deterministic.
 - **In-memory rate limiting** (per process, per user): fine for a single API instance; use a shared store if the API is scaled out.
-- **Chat holds a DB session for the request** (auth dependency); acceptable at this scale, noted for the pooler.
+- **Chat authenticates in its own short transaction** (`current_user_detached`) so no pooled connection (a real server connection behind Supabase's transaction pooler) is held while the model thinks; tools open short sessions of their own.
+- **ADK runs on one long-lived event loop** in a daemon thread (`agent/runner.py`): google-genai keeps async HTTP clients bound to the loop that created them, so `asyncio.run` per request breaks the second chat. Chat turns time out after 120 s; 429/503 from Gemini become a friendly "busy" reply.
+- **Fleet-wide agent tools** `compare_metric` and `forecast_fleet_disk` answer "which VM…" questions in one call instead of one call per VM (the model otherwise loops `get_metric_stats` 25 times and hits free-tier rate limits).
+- **The agent's only write (`save_recommendation`) checks the caller's role** from session state, so viewers stay read-only through chat too.
+- **Model-in-the-loop eval questions name VMs** (`{leak}`, `{idle}` placeholders) where a real user would; questions about "which VM" accept any VM with that role. Live run on gemini-3.5-flash-lite: 17/18 before the routing fix.
+- **Default model `gemini-3.5-flash-lite`** for the larger free quota.
+- **Sync runs once at start-up and on every explicit "sync now" even in a hidden tab**; only the periodic loop pauses while hidden. `applyRows` batches into one transaction (`bulkGet`/`bulkPut`).
+- **Signing in deletes other users' local databases** on that device (covers sessions that expired instead of signing out).
+- **Google sign-in is hidden** until `VITE_ENABLE_GOOGLE_AUTH=true` (provider not configured yet). Email reset uses Supabase's `resetPasswordForEmail` and lands on `/account/password`.
+- **Large demo scenario is for load testing only**: 300 VMs is about 520k samples a day, more than Supabase's free 500 MB over the 14-day retention.
 - **Tests are hermetic**: `conftest.py` blanks `GENERATOR_API_KEY`, `GOOGLE_API_KEY` etc. so a developer's `.env` never leaks into test runs.
 - **Backups via Git Bash/Docker**: `scripts/*.sh` set `MSYS_NO_PATHCONV=1` for Windows.
 - **Phase-by-phase delivery**, pausing after each phase for review.
