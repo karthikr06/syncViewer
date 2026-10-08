@@ -183,4 +183,4 @@ export function useDb(): LocalDb {
   return db;
 }
 
-export const canWrite = (role: Role | null) => role === "admin" || role === "user";
+export const canWrite = (role: Role | null) => role === "admin" || role === "developer";

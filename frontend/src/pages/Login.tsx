@@ -44,15 +44,25 @@ export function Login() {
     try {
       if (mode === "in") {
         const { error } = await supabase.auth.signInWithPassword({ email: v.email, password });
-        if (error) setError(error.message);
+        if (error)
+          setError(
+            /invalid login credentials/i.test(error.message)
+              ? "Wrong email or password. New here, or invited by your team? Choose Sign up."
+              : error.message,
+          );
       } else if (mode === "up") {
         const { data, error } = await supabase.auth.signUp({
           email: v.email,
           password,
           options: { emailRedirectTo: window.location.origin },
         });
-        if (error) setError(error.message);
-        else if (!data.session) setInfo("Check your email to confirm your account, then sign in.");
+        if (error)
+          setError(
+            /already registered/i.test(error.message)
+              ? "This email already has an account. Choose Log in."
+              : error.message,
+          );
+        else if (!data.session) setInfo("Check your email to confirm your account, then log in.");
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(v.email, {
           redirectTo: `${window.location.origin}/account/password`,
@@ -77,54 +87,90 @@ export function Login() {
     if (error) setError(error.message);
   }
 
-  const label = { in: "Sign in", up: "Create account", reset: "Send reset link" }[mode];
+  const label = { in: "Log in", up: "Create account", reset: "Send reset link" }[mode];
+
+  const tab = (m: "in" | "up", text: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={mode === m}
+      onClick={() => switchTo(m)}
+      className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+        mode === m ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
+      }`}
+    >
+      {text}
+    </button>
+  );
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="card w-full max-w-sm space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold">SyncViewer</h1>
-          <p className="text-sm text-slate-500">
-            {mode === "reset" ? "Reset your password." : "All your cloud VMs in one place."}
-          </p>
+      <div className="w-full max-w-sm space-y-4">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight">
+            Sync<span className="text-accent">Viewer</span>
+          </h1>
+          <p className="mt-1 text-sm text-muted">All your cloud VMs in one place.</p>
         </div>
-        {missingConfig.length > 0 && (
-          <ErrorNote message={`Missing configuration: ${missingConfig.join(", ")}. Set it in .env.`} />
-        )}
-        <form className="space-y-3" onSubmit={handleSubmit(submit)} noValidate>
-          <Field label="Email" error={errors.email?.message}>
-            <input className="input" type="email" autoComplete="email" {...register("email")} />
-          </Field>
-          {mode !== "reset" && (
-            <Field label="Password" error={errors.password?.message}>
-              <input
-                className="input"
-                type="password"
-                autoComplete={mode === "in" ? "current-password" : "new-password"}
-                {...register("password")}
-              />
-            </Field>
+        <div className="card space-y-4">
+          {mode === "reset" ? (
+            <div>
+              <h2 className="font-semibold">Reset your password</h2>
+              <p className="text-sm text-muted">We'll email you a link to choose a new one.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-1 rounded-lg bg-subtle p-1" role="tablist">
+                {tab("in", "Log in")}
+                {tab("up", "Sign up")}
+              </div>
+              <p className="text-sm text-muted">
+                {mode === "in"
+                  ? "Welcome back. Log in with the account you already have."
+                  : "New here? Create an account. If a teammate added your email, you'll join their workspace; otherwise you get your own workspace as its admin."}
+              </p>
+            </>
           )}
-          <ErrorNote message={error} />
-          {info && <p className="text-sm text-emerald-700 dark:text-emerald-400">{info}</p>}
-          <button className="btn-primary w-full" disabled={busy}>
-            {busy ? "Please wait…" : label}
-          </button>
-        </form>
-        {env.googleAuth && mode !== "reset" && (
-          <button className="btn-ghost w-full" onClick={() => void google()} type="button">
-            Continue with Google
-          </button>
-        )}
-        <div className="flex justify-between text-sm">
-          <button className="text-sky-600 hover:underline" onClick={() => switchTo(mode === "in" ? "up" : "in")}>
-            {mode === "in" ? "No account? Sign up" : "Back to sign in"}
-          </button>
-          {mode === "in" && (
-            <button className="text-slate-500 hover:underline" onClick={() => switchTo("reset")}>
-              Forgot password?
+          {missingConfig.length > 0 && (
+            <ErrorNote message={`Missing configuration: ${missingConfig.join(", ")}. Set it in .env.`} />
+          )}
+          <form className="space-y-3" onSubmit={handleSubmit(submit)} noValidate>
+            <Field label="Email" error={errors.email?.message}>
+              <input className="input" type="email" autoComplete="email" {...register("email")} />
+            </Field>
+            {mode !== "reset" && (
+              <Field label={mode === "up" ? "Choose a password (8+ characters)" : "Password"} error={errors.password?.message}>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete={mode === "in" ? "current-password" : "new-password"}
+                  {...register("password")}
+                />
+              </Field>
+            )}
+            <ErrorNote message={error} />
+            {info && <p className="text-sm text-emerald-700 dark:text-emerald-400">{info}</p>}
+            <button className="btn-primary w-full" disabled={busy}>
+              {busy ? "Please wait…" : label}
+            </button>
+          </form>
+          {env.googleAuth && mode !== "reset" && (
+            <button className="btn-ghost w-full" onClick={() => void google()} type="button">
+              Continue with Google
             </button>
           )}
+          <div className="text-center text-sm">
+            {mode === "in" && (
+              <button className="text-muted hover:text-ink hover:underline" onClick={() => switchTo("reset")}>
+                Forgot password?
+              </button>
+            )}
+            {mode === "reset" && (
+              <button className="link" onClick={() => switchTo("in")}>
+                Back to log in
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
