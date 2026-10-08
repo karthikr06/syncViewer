@@ -24,6 +24,7 @@ from app.models import (
     Resource,
     UptimeRollup,
     User,
+    Workspace,
 )
 from tests.conftest import alembic_cfg
 
@@ -70,10 +71,12 @@ def db(make_database):
 
 def add_account(factory, owner_id, ref, scenario="small", provider_id=4, name=None):
     with factory() as s:
-        if s.get(User, owner_id) is None:
-            s.add(User(id=owner_id, email=f"{owner_id}@x.com"))
+        if s.get(User, owner_id) is None:  # the owner's workspace shares their id
+            s.add(Workspace(id=owner_id, name="ws"))
             s.flush()
-        acc = CloudAccount(owner_id=owner_id, provider_id=provider_id, name=name or ref,
+            s.add(User(id=owner_id, email=f"{owner_id}@x.com", workspace_id=owner_id))
+            s.flush()
+        acc = CloudAccount(workspace_id=owner_id, provider_id=provider_id, name=name or ref,
                            external_ref=ref, config={"scenario": scenario})
         s.add(acc)
         s.commit()
@@ -222,7 +225,7 @@ def test_alert_rules_open_once_and_target_right_vms(db, adapter_factory, gen_cli
     owner = uuid.uuid4()
     add_account(db, owner, "acc-m", scenario="medium")
     with db() as s:
-        s.add(AlertRule(owner_id=owner, name="low cpu", metric_id=2, operator="<", threshold=10,
+        s.add(AlertRule(workspace_id=owner, name="low cpu", metric_id=2, operator="<", threshold=10,
                         duration_minutes=60, severity="info"))
         s.commit()
     run_cycle(db, make_settings(), adapter_factory, now=NOW, backfill_hours=24)
@@ -240,15 +243,18 @@ def test_alert_rules_open_once_and_target_right_vms(db, adapter_factory, gen_cli
 def test_alert_resolves_when_condition_clears(session):
     from app.services.alert_eval import evaluate_rules
 
-    owner = User(id=uuid.uuid4(), email="r@x.com")
+    ws = Workspace(name="ws")
+    session.add(ws)
+    session.flush()
+    owner = User(id=uuid.uuid4(), email="r@x.com", workspace_id=ws.id)
     session.add(owner)
     session.flush()
-    acc = CloudAccount(owner_id=owner.id, provider_id=4, name="a", external_ref="r")
+    acc = CloudAccount(workspace_id=ws.id, provider_id=4, name="a", external_ref="r")
     session.add(acc)
     session.flush()
     res = Resource(account_id=acc.id, type_id=4, external_id="v", name="v", power_state="running")
     session.add(res)
-    session.add(AlertRule(owner_id=owner.id, name="hot", metric_id=2, operator=">", threshold=80))
+    session.add(AlertRule(workspace_id=ws.id, name="hot", metric_id=2, operator=">", threshold=80))
     session.flush()
     t0 = NOW
 
@@ -260,12 +266,12 @@ def test_alert_resolves_when_condition_clears(session):
     codes = {2: "cpu_percent"}
     sample(0, 95)
     sample(5, 96)
-    evaluate_rules(session, owner.id, acc.id, [res], codes, t0 + timedelta(minutes=6))
+    evaluate_rules(session, ws.id, acc.id, [res], codes, t0 + timedelta(minutes=6))
     alert = session.scalars(select(Alert)).one()
     assert alert.state == "open" and alert.value_at_open == 96
     sample(10, 20)
     sample(15, 25)
-    evaluate_rules(session, owner.id, acc.id, [res], codes, t0 + timedelta(minutes=16))
+    evaluate_rules(session, ws.id, acc.id, [res], codes, t0 + timedelta(minutes=16))
     session.refresh(alert)
     assert alert.state == "resolved" and alert.resolved_at is not None
 

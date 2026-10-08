@@ -1,7 +1,7 @@
 from app.models.alerting import Alert, AlertRule
 from app.models.base import Base
-from app.models.cloud import CloudAccount, Resource, ResourceType
-from app.models.identity import Provider, Role, User
+from app.models.cloud import CloudAccount, Resource, ResourceType, VmAction
+from app.models.identity import Provider, Role, User, Workspace, WorkspaceInvite
 from app.models.insights import AgentRun, InsightDigest, Recommendation
 from app.models.metrics import Incident, MetricDefinition, MetricSample, UptimeRollup
 from app.models.ops import AuditLog, CollectorRun
@@ -37,4 +37,7 @@ __all__ = [
     "Role",
     "UptimeRollup",
     "User",
+    "VmAction",
+    "Workspace",
+    "WorkspaceInvite",
 ]

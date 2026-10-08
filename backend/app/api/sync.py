@@ -37,7 +37,8 @@ def changes(entity: Entity, since: int = Query(0, ge=0), limit: int = Query(500,
     """Rows with version > since, oldest version first, tombstones included. Clients send
     `cursor - overlap` as `since` and upsert idempotently (see docs/architecture.md)."""
     now = datetime.now(UTC)
-    return {**_page(db, user.id, entity, since, limit, now), "server_time": now.isoformat()}
+    return {**_page(db, user.workspace_id, entity, since, limit, now),
+            "server_time": now.isoformat()}
 
 
 @router.get("/bootstrap")
@@ -47,8 +48,9 @@ def bootstrap(limit: int = Query(500, ge=1, le=1000), user: CurrentUser = Depend
     now = datetime.now(UTC)
     return {
         "server_time": now.isoformat(),
-        "me": {"id": str(user.id), "email": user.email, "role": user.role},
-        "entities": {e: _page(db, user.id, e, 0, limit, now) for e in repo.MODELS},
+        "me": {"id": str(user.id), "email": user.email, "role": user.role,
+               "workspace": {"id": str(user.workspace_id), "name": user.workspace_name}},
+        "entities": {e: _page(db, user.workspace_id, e, 0, limit, now) for e in repo.MODELS},
     }
 
 
@@ -63,7 +65,7 @@ def metrics(since: datetime | None = None, window: int = Query(24, ge=1, le=MAX_
     start = max(since.astimezone(UTC), floor) if since else floor
     if start > now:
         raise HTTPException(422, "'since' is in the future")
-    rows = repo.samples_since(db, user.id, start, SAMPLE_METRICS, limit, step)
+    rows = repo.samples_since(db, user.workspace_id, start, SAMPLE_METRICS, limit, step)
     return {
         "rows": [{"resource_id": str(r), "metric": m, "ts": _z(t), "value": v}
                  for r, m, t, v in rows],

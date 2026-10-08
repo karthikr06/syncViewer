@@ -46,7 +46,7 @@ def _sorted(stmt: Select, sort: str | None, allowed: dict, default):
 # ---- cloud accounts -------------------------------------------------------------------------
 def list_accounts(session: Session, owner: uuid.UUID, q: str | None, status: str | None,
                   page: int, page_size: int, sort: str | None):
-    stmt = select(CloudAccount).where(CloudAccount.owner_id == owner,
+    stmt = select(CloudAccount).where(CloudAccount.workspace_id == owner,
                                       CloudAccount.deleted_at.is_(None))
     if q:
         stmt = stmt.where(CloudAccount.name.icontains(q, autoescape=True))
@@ -59,14 +59,14 @@ def list_accounts(session: Session, owner: uuid.UUID, q: str | None, status: str
 
 def get_account(session: Session, owner: uuid.UUID, account_id: uuid.UUID) -> CloudAccount | None:
     return session.scalar(select(CloudAccount).where(
-        CloudAccount.id == account_id, CloudAccount.owner_id == owner,
+        CloudAccount.id == account_id, CloudAccount.workspace_id == owner,
         CloudAccount.deleted_at.is_(None)))
 
 
 def create_account(session: Session, owner: uuid.UUID, provider_id: int, name: str,
                    external_ref: str, config: dict, credentials_encrypted: bytes | None
                    ) -> CloudAccount:
-    account = CloudAccount(owner_id=owner, provider_id=provider_id, name=name,
+    account = CloudAccount(workspace_id=owner, provider_id=provider_id, name=name,
                            external_ref=external_ref, config=config,
                            credentials_encrypted=credentials_encrypted)
     session.add(account)
@@ -95,7 +95,7 @@ def _owned_resources() -> Select:
 def list_resources(session: Session, owner: uuid.UUID, q: str | None, account_id: uuid.UUID | None,
                    power_state: str | None, health_state: str | None, region: str | None,
                    page: int, page_size: int, sort: str | None):
-    stmt = _owned_resources().where(CloudAccount.owner_id == owner)
+    stmt = _owned_resources().where(CloudAccount.workspace_id == owner)
     if q:
         stmt = stmt.where(Resource.name.icontains(q, autoescape=True)
                           | Resource.external_id.icontains(q, autoescape=True))
@@ -114,18 +114,18 @@ def list_resources(session: Session, owner: uuid.UUID, q: str | None, account_id
 
 
 def get_resource(session: Session, owner: uuid.UUID, resource_id: uuid.UUID) -> Resource | None:
-    return session.scalar(_owned_resources().where(CloudAccount.owner_id == owner,
+    return session.scalar(_owned_resources().where(CloudAccount.workspace_id == owner,
                                                    Resource.id == resource_id))
 
 
 def all_resources(session: Session, owner: uuid.UUID) -> list[Resource]:
-    return list(session.scalars(_owned_resources().where(CloudAccount.owner_id == owner)
+    return list(session.scalars(_owned_resources().where(CloudAccount.workspace_id == owner)
                                 .order_by(Resource.name)))
 
 
 def find_resource(session: Session, owner: uuid.UUID, key: str) -> Resource | None:
     """Resolve by id, external id or exact name (used by the agent, which sees names)."""
-    base = _owned_resources().where(CloudAccount.owner_id == owner)
+    base = _owned_resources().where(CloudAccount.workspace_id == owner)
     try:
         by_id = session.scalar(base.where(Resource.id == uuid.UUID(key)))
         if by_id:
@@ -165,7 +165,7 @@ def incidents_for(session: Session, owner: uuid.UUID, resource_id: uuid.UUID,
     return list(session.scalars(
         select(Incident).join(Resource, Resource.id == Incident.resource_id)
         .join(CloudAccount, CloudAccount.id == Resource.account_id)
-        .where(CloudAccount.owner_id == owner, Incident.resource_id == resource_id,
+        .where(CloudAccount.workspace_id == owner, Incident.resource_id == resource_id,
                (Incident.started_at >= since) | Incident.ended_at.is_(None))
         .order_by(Incident.started_at.desc())))
 
@@ -175,7 +175,7 @@ def rollups_for(session: Session, owner: uuid.UUID, resource_ids: list[uuid.UUID
     return list(session.scalars(
         select(UptimeRollup).join(Resource, Resource.id == UptimeRollup.resource_id)
         .join(CloudAccount, CloudAccount.id == Resource.account_id)
-        .where(CloudAccount.owner_id == owner, UptimeRollup.resource_id.in_(resource_ids),
+        .where(CloudAccount.workspace_id == owner, UptimeRollup.resource_id.in_(resource_ids),
                UptimeRollup.bucket_start >= since)
         .order_by(UptimeRollup.resource_id, UptimeRollup.bucket_start)))
 
@@ -183,7 +183,7 @@ def rollups_for(session: Session, owner: uuid.UUID, resource_ids: list[uuid.UUID
 # ---- alert rules / alerts -------------------------------------------------------------------
 def list_rules(session: Session, owner: uuid.UUID, q: str | None, page: int, page_size: int,
                sort: str | None):
-    stmt = select(AlertRule).where(AlertRule.owner_id == owner, AlertRule.deleted_at.is_(None))
+    stmt = select(AlertRule).where(AlertRule.workspace_id == owner, AlertRule.deleted_at.is_(None))
     if q:
         stmt = stmt.where(AlertRule.name.icontains(q, autoescape=True))
     stmt = _sorted(stmt, sort, {"name": AlertRule.name, "severity": AlertRule.severity},
@@ -193,7 +193,7 @@ def list_rules(session: Session, owner: uuid.UUID, q: str | None, page: int, pag
 
 def get_rule(session: Session, owner: uuid.UUID, rule_id: uuid.UUID) -> AlertRule | None:
     return session.scalar(select(AlertRule).where(
-        AlertRule.id == rule_id, AlertRule.owner_id == owner, AlertRule.deleted_at.is_(None)))
+        AlertRule.id == rule_id, AlertRule.workspace_id == owner, AlertRule.deleted_at.is_(None)))
 
 
 def metric_id_by_code(session: Session, code: str) -> int | None:
@@ -203,7 +203,7 @@ def metric_id_by_code(session: Session, code: str) -> int | None:
 def list_alerts(session: Session, owner: uuid.UUID, state: str | None, page: int,
                 page_size: int):
     stmt = (select(Alert).join(AlertRule, AlertRule.id == Alert.rule_id)
-            .where(AlertRule.owner_id == owner))
+            .where(AlertRule.workspace_id == owner))
     if state:
         stmt = stmt.where(Alert.state == state)
     return paginate(session, stmt.order_by(Alert.opened_at.desc()), page, page_size)
@@ -211,14 +211,14 @@ def list_alerts(session: Session, owner: uuid.UUID, state: str | None, page: int
 
 def get_alert(session: Session, owner: uuid.UUID, alert_id: int) -> Alert | None:
     return session.scalar(select(Alert).join(AlertRule, AlertRule.id == Alert.rule_id)
-                          .where(Alert.id == alert_id, AlertRule.owner_id == owner))
+                          .where(Alert.id == alert_id, AlertRule.workspace_id == owner))
 
 
 # ---- recommendations ------------------------------------------------------------------------
 def list_recommendations(session: Session, owner: uuid.UUID, status: str | None,
                          category: str | None, severity: str | None, q: str | None, page: int,
                          page_size: int):
-    stmt = select(Recommendation).where(Recommendation.owner_id == owner)
+    stmt = select(Recommendation).where(Recommendation.workspace_id == owner)
     if status:
         stmt = stmt.where(Recommendation.status == status)
     if category:
@@ -233,4 +233,4 @@ def list_recommendations(session: Session, owner: uuid.UUID, status: str | None,
 def get_recommendation(session: Session, owner: uuid.UUID, rec_id: int
                        ) -> Recommendation | None:
     return session.scalar(select(Recommendation).where(Recommendation.id == rec_id,
-                                                       Recommendation.owner_id == owner))
+                                                       Recommendation.workspace_id == owner))

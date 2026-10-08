@@ -32,7 +32,7 @@ class Recommendation(Base, VersionMixin, TimestampMixin):
         CheckConstraint("source IN ('rule','agent')", name="source_valid"),
         Index(
             "uq_recommendations_open_dedupe",
-            "owner_id",
+            "workspace_id",
             "dedupe_key",
             unique=True,
             postgresql_where=text("status = 'new'"),
@@ -40,8 +40,8 @@ class Recommendation(Base, VersionMixin, TimestampMixin):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     resource_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("resources.id", ondelete="CASCADE"), index=True
@@ -64,8 +64,8 @@ class InsightDigest(Base, VersionMixin):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -80,7 +80,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     trigger: Mapped[str] = mapped_column(String(40), nullable=False)

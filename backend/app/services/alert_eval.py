@@ -12,12 +12,12 @@ OPS = {">": operator.gt, ">=": operator.ge, "<": operator.lt, "<=": operator.le}
 SAMPLE_STEP = timedelta(minutes=5)
 
 
-def evaluate_rules(session: Session, owner_id: uuid.UUID, account_id: uuid.UUID,
+def evaluate_rules(session: Session, workspace_id: uuid.UUID, account_id: uuid.UUID,
                    resources: list[Resource], metric_codes: dict[int, str], now: datetime) -> int:
     """Open an alert when the condition held for the whole duration, resolve when it clears."""
     running = [r for r in resources if r.power_state == "running"]
     changes = 0
-    for rule in alert_repo.rules_for_account(session, owner_id, account_id):
+    for rule in alert_repo.rules_for_account(session, workspace_id, account_id):
         if rule.metric_id not in metric_codes:
             continue
         targets = [r for r in running if rule.resource_id in (None, r.id)]

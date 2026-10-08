@@ -17,6 +17,7 @@ from app.models import (
     Role,
     UptimeRollup,
     User,
+    Workspace,
 )
 from tests.conftest import alembic_cfg
 
@@ -24,14 +25,17 @@ T0 = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
 
 
 def make_user(s, email="a@x.com", role_id=2):
-    u = User(id=uuid.uuid4(), email=email, role_id=role_id)
+    ws = Workspace(name="ws")
+    s.add(ws)
+    s.flush()
+    u = User(id=uuid.uuid4(), email=email, role_id=role_id, workspace_id=ws.id)
     s.add(u)
     s.flush()
     return u
 
 
 def make_account(s, owner, ref="acc1"):
-    a = CloudAccount(owner_id=owner.id, provider_id=4, name="acc", external_ref=ref)
+    a = CloudAccount(workspace_id=owner.workspace_id, provider_id=4, name="acc", external_ref=ref)
     s.add(a)
     s.flush()
     return a
@@ -45,12 +49,12 @@ def make_resource(s, account, ext="vm1"):
 
 
 def test_seed_and_table_count(session):
-    assert {r.name for r in session.scalars(select(Role))} == {"admin", "user", "viewer"}
+    assert {r.name for r in session.scalars(select(Role))} == {"admin", "developer", "viewer"}
     tables = set(inspect(session.connection()).get_table_names()) - {"alembic_version"}
-    assert len(tables) == 17
+    assert len(tables) == 20
 
 
-def test_user_defaults_to_user_role(session):
+def test_user_defaults_to_developer_role(session):
     u = make_user(session)
     session.refresh(u)
     assert u.role_id == 2 and u.is_active is True
@@ -67,7 +71,8 @@ def test_unique_and_check_constraints(session):
         r.power_state = "exploding"
         session.flush()
     with pytest.raises(IntegrityError), session.begin_nested():
-        session.add(CloudAccount(owner_id=u.id, provider_id=4, name="x", external_ref="r",
+        session.add(CloudAccount(workspace_id=u.workspace_id,
+                                 provider_id=4, name="x", external_ref="r",
                                  status="bogus"))
         session.flush()
 
@@ -77,7 +82,8 @@ def test_alert_rule_single_scope(session):
     a = make_account(session, u)
     r = make_resource(session, a)
     with pytest.raises(IntegrityError), session.begin_nested():
-        session.add(AlertRule(owner_id=u.id, name="n", account_id=a.id, resource_id=r.id,
+        session.add(AlertRule(workspace_id=u.workspace_id,
+                              name="n", account_id=a.id, resource_id=r.id,
                              metric_id=2, operator=">", threshold=90))
         session.flush()
 
@@ -86,7 +92,8 @@ def test_one_open_alert_per_rule_resource(session):
     u = make_user(session)
     a = make_account(session, u)
     r = make_resource(session, a)
-    rule = AlertRule(owner_id=u.id, name="n", resource_id=r.id, metric_id=2, operator=">",
+    rule = AlertRule(workspace_id=u.workspace_id,
+                     name="n", resource_id=r.id, metric_id=2, operator=">",
                      threshold=90)
     session.add(rule)
     session.flush()
@@ -101,7 +108,8 @@ def test_recommendation_dedupe_only_while_new(session):
     u = make_user(session)
 
     def rec(status="new"):
-        return Recommendation(owner_id=u.id, category="waste", title="t", dedupe_key="k",
+        return Recommendation(workspace_id=u.workspace_id,
+                              category="waste", title="t", dedupe_key="k",
                               status=status)
 
     first = rec()
@@ -233,8 +241,10 @@ def test_out_of_order_commit_needs_overlap(migrated_url):
     eng = create_engine(migrated_url, connect_args={"prepare_threshold": None})
     owner_id = uuid.uuid4()
     with eng.begin() as c:
-        c.execute(text("INSERT INTO users(id,email) VALUES (:i,'ooo@x.com')"), {"i": owner_id})
-    ins = text("INSERT INTO cloud_accounts(owner_id,provider_id,name,external_ref) "
+        c.execute(text("INSERT INTO workspaces(id,name) VALUES (:i,'w')"), {"i": owner_id})
+        c.execute(text("INSERT INTO users(id,email,workspace_id) VALUES (:i,'ooo@x.com',:i)"),
+                  {"i": owner_id})
+    ins = text("INSERT INTO cloud_accounts(workspace_id,provider_id,name,external_ref) "
                "VALUES (:o,4,'n',:r)")
     c1, c2 = eng.connect(), eng.connect()
     t1, t2 = c1.begin(), c2.begin()
@@ -243,7 +253,7 @@ def test_out_of_order_commit_needs_overlap(migrated_url):
     t2.commit()                                      # higher commits first
     with eng.connect() as reader:
         seen = reader.execute(
-            text("SELECT external_ref, version FROM cloud_accounts WHERE owner_id=:o"),
+            text("SELECT external_ref, version FROM cloud_accounts WHERE workspace_id=:o"),
             {"o": owner_id}).all()
         cursor = max(v for _, v in seen)
         assert [r for r, _ in seen] == ["second"]
@@ -251,10 +261,12 @@ def test_out_of_order_commit_needs_overlap(migrated_url):
     c1.close(), c2.close()
     with eng.connect() as reader:
         strict = reader.execute(
-            text("SELECT external_ref FROM cloud_accounts WHERE owner_id=:o AND version > :c"),
+            text("SELECT external_ref FROM cloud_accounts "
+                 "WHERE workspace_id=:o AND version > :c"),
             {"o": owner_id, "c": cursor}).scalars().all()
         overlap = reader.execute(
-            text("SELECT external_ref FROM cloud_accounts WHERE owner_id=:o AND version > :c"),
+            text("SELECT external_ref FROM cloud_accounts "
+                 "WHERE workspace_id=:o AND version > :c"),
             {"o": owner_id, "c": cursor - 500}).scalars().all()
     assert strict == []                       # the row was skipped
     assert set(overlap) == {"first", "second"}  # overlap + idempotent upsert recovers it
@@ -274,3 +286,50 @@ def test_migrate_down_and_up(make_database):
     eng.dispose()
     assert left == 0
     command.upgrade(cfg, "head")
+
+
+def test_workspace_migration_keeps_existing_data(make_database):
+    """Upgrading a populated 0004 database: each user becomes the admin of a workspace with the
+    same id, and their accounts and advice belong to it."""
+    url = make_database()
+    cfg = alembic_cfg(url)
+    command.upgrade(cfg, "0004")
+    eng = create_engine(url, connect_args={"prepare_threshold": None})
+    uid, vid = uuid.uuid4(), uuid.uuid4()
+    with eng.begin() as c:
+        c.execute(text("INSERT INTO users(id,email,role_id) VALUES (:u,'own@x.com',2),"
+                       "(:v,'view@x.com',3)"), {"u": uid, "v": vid})
+        c.execute(text("INSERT INTO cloud_accounts(owner_id,provider_id,name,external_ref) "
+                       "VALUES (:u,4,'demo','ref')"), {"u": uid})
+        c.execute(text("INSERT INTO recommendations(owner_id,category,title,dedupe_key) "
+                       "VALUES (:u,'waste','t','k')"), {"u": uid})
+    command.upgrade(cfg, "head")
+    with eng.connect() as c:
+        rows = c.execute(text(
+            "SELECT u.email, r.name, u.workspace_id = u.id, w.name FROM users u "
+            "JOIN roles r ON r.id = u.role_id JOIN workspaces w ON w.id = u.workspace_id "
+            "ORDER BY u.email")).all()
+        assert rows == [("own@x.com", "admin", True, "own's workspace"),
+                        ("view@x.com", "viewer", True, "view's workspace")]
+        assert c.execute(text("SELECT workspace_id FROM cloud_accounts")).scalar() == uid
+        assert c.execute(text("SELECT workspace_id FROM recommendations")).scalar() == uid
+        assert c.execute(text("SELECT count(*) FROM v_account_uptime_7d "
+                              "WHERE workspace_id = :u"), {"u": uid}).scalar() == 1
+    eng.dispose()
+
+
+def test_one_pending_invite_per_email(session):
+    from app.models import WorkspaceInvite
+
+    u = make_user(session)
+    session.add(WorkspaceInvite(workspace_id=u.workspace_id, email="new@x.com", role_id=3))
+    session.flush()
+    with pytest.raises(IntegrityError), session.begin_nested():
+        session.add(WorkspaceInvite(workspace_id=u.workspace_id, email="new@x.com", role_id=2))
+        session.flush()
+    with pytest.raises(IntegrityError), session.begin_nested():  # admin is not invitable
+        session.add(WorkspaceInvite(workspace_id=u.workspace_id, email="b@x.com", role_id=1))
+        session.flush()
+    with pytest.raises(IntegrityError), session.begin_nested():  # stored lower-case
+        session.add(WorkspaceInvite(workspace_id=u.workspace_id, email="C@x.com", role_id=3))
+        session.flush()

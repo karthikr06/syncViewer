@@ -1,10 +1,12 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import DB, CurrentUser, current_user, not_found
+from app.api.deps import DB, CurrentUser, current_user, get_settings, not_found, rate_limited
+from app.core.config import Settings
 from app.repositories import owned
 from app.schemas.entities import (
     IncidentOut,
@@ -13,8 +15,10 @@ from app.schemas.entities import (
     Page,
     ResourceDetail,
     ResourceOut,
+    VmActionOut,
 )
-from app.schemas.requests import METRICS
+from app.schemas.requests import METRICS, VmActionRequest
+from app.services import vm_actions
 
 router = APIRouter(prefix="/resources", tags=["resources"])
 MAX_POINTS = 5000
@@ -27,14 +31,15 @@ def list_resources(q: str | None = None, account_id: uuid.UUID | None = None,
                    page_size: int = Query(25, ge=1, le=100), sort: str | None = None,
                    user: CurrentUser = Depends(current_user), db: Session = DB):
     items, total, page, page_size = owned.list_resources(
-        db, user.id, q, account_id, power_state, health_state, region, page, page_size, sort)
+        db, user.workspace_id, q, account_id, power_state, health_state, region, page, page_size,
+        sort)
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{resource_id}", response_model=ResourceDetail)
 def get_resource(resource_id: uuid.UUID, user: CurrentUser = Depends(current_user),
                  db: Session = DB):
-    res = owned.get_resource(db, user.id, resource_id)
+    res = owned.get_resource(db, user.workspace_id, resource_id)
     if res is None:
         raise not_found()
     base = ResourceOut.model_validate(res).model_dump()
@@ -46,7 +51,7 @@ def get_metrics(resource_id: uuid.UUID, metric: METRICS = "cpu_percent",
                 from_: datetime | None = Query(None, alias="from"), to: datetime | None = None,
                 step: int = Query(300, ge=60, le=86400),
                 user: CurrentUser = Depends(current_user), db: Session = DB):
-    res = owned.get_resource(db, user.id, resource_id)
+    res = owned.get_resource(db, user.workspace_id, resource_id)
     if res is None:
         raise not_found()
     end = (to or datetime.now(UTC)).astimezone(UTC)
@@ -63,7 +68,53 @@ def get_metrics(resource_id: uuid.UUID, metric: METRICS = "cpu_percent",
 @router.get("/{resource_id}/incidents", response_model=list[IncidentOut])
 def get_incidents(resource_id: uuid.UUID, days: int = Query(14, ge=1, le=90),
                   user: CurrentUser = Depends(current_user), db: Session = DB):
-    if owned.get_resource(db, user.id, resource_id) is None:
+    if owned.get_resource(db, user.workspace_id, resource_id) is None:
         raise not_found()
-    return owned.incidents_for(db, user.id, resource_id,
+    return owned.incidents_for(db, user.workspace_id, resource_id,
                                datetime.now(UTC) - timedelta(days=days))
+
+
+def _action_out(a, email: str | None) -> VmActionOut:
+    return VmActionOut(id=a.id, action=a.action, status=a.status, from_state=a.from_state,
+                       to_state=a.to_state, error=a.error, requested_at=a.requested_at,
+                       requested_by=email)
+
+
+@router.post("/{resource_id}/actions", response_model=VmActionOut)
+def act(resource_id: uuid.UUID, body: VmActionRequest, request: Request,
+        user: CurrentUser = Depends(rate_limited("action_limiter")), db: Session = DB,
+        settings: Settings = Depends(get_settings)):
+    """Start, stop, restart or deallocate a VM (admins and developers)."""
+    if not user.can_write:
+        raise HTTPException(403, "Viewers have read-only access.")
+    res = owned.get_resource(db, user.workspace_id, resource_id)
+    if res is None:
+        raise not_found()
+    account = owned.get_account(db, user.workspace_id, res.account_id)
+    rec = None
+    if body.recommendation_id is not None:
+        rec = owned.get_recommendation(db, user.workspace_id, body.recommendation_id)
+        if rec is None:
+            raise not_found("Recommendation")
+    adapter = request.app.state.adapter_factory(account.provider_code)
+    try:
+        record = vm_actions.perform(db, settings, adapter, res, account, body.action, user.id, rec)
+    except vm_actions.ActionNotAllowed as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except vm_actions.ProviderUnavailable as exc:
+        raise HTTPException(400, str(exc)) from exc
+    out = _action_out(record, user.email)
+    if record.status == "failed":
+        # the failed attempt is still recorded (the transaction commits): return, don't raise
+        detail = f"The provider could not {body.action} the VM: {record.error}"
+        return JSONResponse(status_code=502, content={**out.model_dump(mode="json"),
+                                                      "detail": detail})
+    return out
+
+
+@router.get("/{resource_id}/actions", response_model=list[VmActionOut])
+def action_history(resource_id: uuid.UUID, user: CurrentUser = Depends(current_user),
+                   db: Session = DB):
+    if owned.get_resource(db, user.workspace_id, resource_id) is None:
+        raise not_found()
+    return [_action_out(a, email) for a, email in vm_actions.history(db, resource_id)]

@@ -1,4 +1,4 @@
-from app.collector.adapters.base import ProviderAdapter
+from app.collector.adapters.base import ActionRejected, ProviderAdapter
 from app.collector.adapters.mock import MockAdapter
 from app.collector.adapters.stubs import AwsAdapter, AzureAdapter, GcpAdapter
 from app.core.config import Settings
@@ -16,4 +16,4 @@ def get_adapter(provider_code: str, settings: Settings) -> ProviderAdapter:
     raise ValueError(f"unknown provider {provider_code!r}")
 
 
-__all__ = ["MockAdapter", "ProviderAdapter", "get_adapter"]
+__all__ = ["ActionRejected", "MockAdapter", "ProviderAdapter", "get_adapter"]
