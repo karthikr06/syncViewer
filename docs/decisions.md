@@ -5,7 +5,7 @@
 - **Tests use `pgembed` (embedded PostgreSQL 17)** because Docker is not installed on the dev machine; CI will use the same. It also ships `pg_dump`/`pg_restore`.
 - **Migration 0001 uses `Base.metadata.create_all`** to create the 17 tables from the models; triggers, procedure, views, seed and lockdown are explicit raw-SQL migrations 0002-0004.
 - **Alert rule scope:** both `account_id` and `resource_id` NULL means "all of the owner's resources"; at most one may be set.
-- **Alerts/incidents have no `owner_id`**; ownership is derived by join (3NF).
+- **Alerts/incidents have no `workspace_id`**; ownership is derived by join (3NF).
 - **ER PNG export deferred** (needs Node/mermaid-cli); Mermaid source is in `docs/er-diagram.md`.
 - **Generator package is `syncgen/`** (not `app/`) so backend tests can import it in-process without a name clash.
 - **Small scenario has one idle VM**; medium/large add more idle VMs, a flaky VM (same-hour daily outage) and repeats. Stopped VMs emit no metrics; an unresponsive VM is `running` with availability 0.
@@ -36,3 +36,11 @@
 - **Tests are hermetic**: `conftest.py` blanks `GENERATOR_API_KEY`, `GOOGLE_API_KEY` etc. so a developer's `.env` never leaks into test runs.
 - **Backups via Git Bash/Docker**: `scripts/*.sh` set `MSYS_NO_PATHCONV=1` for Windows.
 - **Phase-by-phase delivery**, pausing after each phase for review.
+- **Teams are workspaces.** All monitored data belongs to a workspace; a user belongs to one workspace with one role (admin, developer, viewer). A first sign-up creates a workspace with that person as admin; an admin's invite by email makes the next sign-up with that email a developer or viewer there. One workspace per user keeps scoping simple; joining a second team needs a separate account.
+- **Migration 0005 keeps existing data in place:** each existing user becomes admin of a workspace whose id equals their user id, so the old `owner_id` values are already valid workspace ids (column renamed and re-pointed, no rows rewritten).
+- **Migration 0001 is frozen DDL** (it used to call `create_all` on the live models, which would have broken replaying history once models changed); 0004 uses a fixed table list. A schema comparison proved the frozen baseline identical.
+- **ADMIN_EMAILS now means platform operators** (see collector health across workspaces). It no longer grants admin; workspace admins are whoever created the workspace.
+- **VM power actions go through the provider adapter** and are recorded in `vm_actions`; the generator keeps an in-memory action log so demo VMs really change state and metrics. The AI assistant stays read-only (it cannot take VM actions).
+- **One-click fixes:** only advice with a single safe, reversible action gets a fix button (stopped-but-billed -> deallocate). Waste advice closes itself when the VM is no longer stopped; the re-raise cooldown applies to dismissed advice only, so a fixed problem that comes back is reported again.
+- **Theme:** semantic colour tokens (CSS variables, WCAG AA text contrast) with a light/dark/system switch; the pre-paint theme script is a static file because the CSP forbids inline scripts.
+- **VM names in recommendations, AI answers and digests are links** to the VM's page (whole-name matching; code spans and fenced code are left alone except an inline code span that is exactly a VM name).

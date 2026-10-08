@@ -5,7 +5,9 @@ Mermaid source (renders on GitHub). A PNG export (`mmdc -i er-diagram.md`) is a 
 ```mermaid
 erDiagram
     roles ||--o{ users : "has"
-    users ||--o{ cloud_accounts : "owns"
+    workspaces ||--o{ users : "has members"
+    workspaces ||--o{ workspace_invites : "issues"
+    workspaces ||--o{ cloud_accounts : "owns"
     providers ||--o{ cloud_accounts : "type of"
     providers ||--o{ resource_types : "defines"
     cloud_accounts ||--o{ resources : "contains"
@@ -14,21 +16,36 @@ erDiagram
     metric_definitions ||--o{ metric_samples : "measured as"
     resources ||--o{ uptime_rollups : "summarised by"
     resources ||--o{ incidents : "suffers"
-    users ||--o{ alert_rules : "defines"
+    workspaces ||--o{ alert_rules : "defines"
     metric_definitions ||--o{ alert_rules : "watches"
     cloud_accounts |o--o{ alert_rules : "scopes (optional)"
     resources |o--o{ alert_rules : "scopes (optional)"
     alert_rules ||--o{ alerts : "raises"
     resources ||--o{ alerts : "subject of"
-    users ||--o{ recommendations : "receives"
+    workspaces ||--o{ recommendations : "receives"
     resources |o--o{ recommendations : "about (optional)"
-    users ||--o{ insight_digests : "receives"
+    workspaces ||--o{ insight_digests : "receives"
+    resources ||--o{ vm_actions : "acted on"
+    users |o--o{ vm_actions : "requests"
     users ||--o{ agent_runs : "triggers"
 
     roles { smallint id PK
             text name UK }
+    workspaces { uuid id PK
+                 text name }
+    workspace_invites { bigint id PK
+                        uuid workspace_id FK
+                        text email
+                        smallint role_id FK
+                        timestamptz accepted_at }
+    vm_actions { bigint id PK
+                 uuid resource_id FK
+                 uuid requested_by FK
+                 text action
+                 text status }
     users { uuid id PK
             text email UK
+            uuid workspace_id FK
             smallint role_id FK
             bool is_active
             timestamptz created_at
@@ -38,7 +55,7 @@ erDiagram
                 text name
                 bool is_enabled }
     cloud_accounts { uuid id PK
-                     uuid owner_id FK
+                     uuid workspace_id FK
                      smallint provider_id FK
                      text name
                      text external_ref
@@ -86,7 +103,7 @@ erDiagram
                 text kind
                 bigint version }
     alert_rules { uuid id PK
-                  uuid owner_id FK
+                  uuid workspace_id FK
                   uuid account_id FK
                   uuid resource_id FK
                   smallint metric_id FK
@@ -103,7 +120,7 @@ erDiagram
              timestamptz resolved_at
              bigint version }
     recommendations { bigint id PK
-                      uuid owner_id FK
+                      uuid workspace_id FK
                       uuid resource_id FK
                       text category
                       text severity
@@ -113,14 +130,14 @@ erDiagram
                       jsonb evidence
                       bigint version }
     insight_digests { bigint id PK
-                      uuid owner_id FK
+                      uuid workspace_id FK
                       timestamptz period_start
                       timestamptz period_end
                       text summary_md
                       text generated_by
                       bigint version }
     agent_runs { bigint id PK
-                 uuid owner_id FK
+                 uuid user_id FK
                  text trigger
                  jsonb tools_called
                  text status }
@@ -143,6 +160,6 @@ erDiagram
 ## Normalization (3NF)
 - Every table has a single-attribute or minimal composite primary key; non-key columns depend on the whole key and nothing else.
 - Roles, providers, resource types and metric definitions are separate lookup tables, so names/units are stored once (no transitive dependency such as `resource -> provider name`).
-- Ownership is stored once, on `cloud_accounts`. Resources, alerts and incidents reach their owner through joins instead of duplicating `owner_id` (which would create a transitive dependency).
+- Ownership is stored once, on `cloud_accounts.workspace_id`. Resources, alerts and incidents reach their owner through joins instead of duplicating `workspace_id` (which would create a transitive dependency).
 - `uptime_rollups` is deliberately a derived (denormalized) summary table for read performance; it is regenerable from `metric_samples` by `compute_uptime_rollup`.
 - JSONB columns (`tags`, `attributes`, `config`, `evidence`) hold provider-specific, schema-less data that is never joined or filtered relationally.
