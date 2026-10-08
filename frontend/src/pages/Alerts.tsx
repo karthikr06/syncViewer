@@ -135,7 +135,7 @@ export function Alerts() {
     }),
     [db],
   );
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
 
   const ruleOf = new Map(data.rules.map((r) => [r.id, r]));
   const resName = new Map(data.resources.map((r) => [r.id, r.name]));
@@ -184,19 +184,19 @@ export function Alerts() {
           ) : (
             <div className="card overflow-x-auto p-0">
               <table className="w-full">
-                <thead className="border-b border-slate-200 dark:border-slate-800">
+                <thead className="border-b border-line">
                   <tr>
                     <th className="th">Rule</th><th className="th">VM</th><th className="th">Opened</th>
                     <th className="th">Value</th><th className="th">State</th><th className="th" />
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-line">
                   {view.rows.map((a) => {
                     const rule = ruleOf.get(a.rule_id);
                     return (
                       <tr key={a.id}>
                         <td className="td">{rule?.name ?? "rule"} {rule && <Badge tone={severityTone(rule.severity)}>{rule.severity}</Badge>}</td>
-                        <td className="td"><Link className="text-sky-600 hover:underline" to={`/resources/${a.resource_id}`}>{resName.get(a.resource_id) ?? "VM"}</Link></td>
+                        <td className="td"><Link className="text-link hover:underline" to={`/resources/${a.resource_id}`}>{resName.get(a.resource_id) ?? "VM"}</Link></td>
                         <td className="td">{fmtDate(a.opened_at)}</td>
                         <td className="td">{a.value_at_open?.toFixed(1) ?? "-"}</td>
                         <td className="td"><Badge tone={a.state === "open" ? "red" : a.state === "acknowledged" ? "amber" : "gray"}>{a.state}</Badge></td>
@@ -222,10 +222,10 @@ export function Alerts() {
           ) : (
             <div className="card overflow-x-auto p-0">
               <table className="w-full">
-                <thead className="border-b border-slate-200 dark:border-slate-800">
+                <thead className="border-b border-line">
                   <tr><th className="th">Name</th><th className="th">Condition</th><th className="th">For</th><th className="th">Severity</th><th className="th">Enabled</th><th className="th" /></tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-line">
                   {data.rules.map((r) => (
                     <tr key={r.id}>
                       <td className="td font-medium">{r.name}</td>

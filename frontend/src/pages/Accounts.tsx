@@ -92,7 +92,7 @@ export function Accounts() {
     async () => ({ accounts: await db.cloud_accounts.toArray(), resources: await db.resources.toArray() }),
     [db],
   );
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
   const counts = new Map<string, number>();
   data.resources.forEach((r) => counts.set(r.account_id, (counts.get(r.account_id) ?? 0) + 1));
 
@@ -135,10 +135,10 @@ export function Accounts() {
                 <h3 className="font-semibold">{a.name}</h3>
                 <Badge tone={a.status === "active" ? "green" : a.status === "error" ? "red" : "amber"}>{a.status}</Badge>
               </div>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted">
                 {a.provider_code} · {a.external_ref} · {counts.get(a.id) ?? 0} VMs
               </p>
-              <p className="text-sm text-slate-500">Last collected: {a.last_collected_at ? ago(a.last_collected_at) : "not yet"}</p>
+              <p className="text-sm text-muted">Last collected: {a.last_collected_at ? ago(a.last_collected_at) : "not yet"}</p>
               {a.last_error && <p className="mt-1 text-sm text-red-600">{a.last_error}</p>}
               {writer && (
                 <div className="mt-3 flex flex-wrap gap-2">

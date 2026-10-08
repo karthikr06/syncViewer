@@ -40,7 +40,7 @@ export function Resources() {
       .sort((a, b) => String(a[sort] ?? "").localeCompare(String(b[sort] ?? "")));
   }, [data, q, account, power, health, region, sort]);
 
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
   const regions = [...new Set(data.resources.map((r) => r.region).filter(Boolean))] as string[];
   const view = paginate(filtered, page, PAGE_SIZE);
   const accountName = new Map(data.accounts.map((a) => [a.id, a.name]));
@@ -85,7 +85,7 @@ export function Resources() {
       ) : (
         <div className="card overflow-x-auto p-0">
           <table className="w-full">
-            <thead className="border-b border-slate-200 dark:border-slate-800">
+            <thead className="border-b border-line">
               <tr>
                 {(["name", "region", "size_sku", "power_state"] as const).map((c) => (
                   <th key={c} className="th cursor-pointer" onClick={() => setSort(c)}>
@@ -96,17 +96,17 @@ export function Resources() {
                 <th className="th">Account</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-line">
               {view.rows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <tr key={r.id} className="hover:bg-subtle/60">
                   <td className="td font-medium">
-                    <Link className="text-sky-600 hover:underline" to={`/resources/${r.id}`}>{r.name}</Link>
+                    <Link className="text-link hover:underline" to={`/resources/${r.id}`}>{r.name}</Link>
                   </td>
                   <td className="td">{r.region ?? "-"}</td>
                   <td className="td">{r.size_sku ?? "-"}</td>
                   <td className="td"><Badge tone={powerTone(r.power_state)}>{r.power_state}</Badge></td>
                   <td className="td"><Badge tone={healthTone(r.health_state)}>{r.health_state}</Badge></td>
-                  <td className="td text-slate-500">{accountName.get(r.account_id) ?? "-"}</td>
+                  <td className="td text-muted">{accountName.get(r.account_id) ?? "-"}</td>
                 </tr>
               ))}
             </tbody>

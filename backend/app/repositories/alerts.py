@@ -7,23 +7,23 @@ from sqlalchemy.orm import Session
 from app.models import Alert, AlertRule, Resource
 
 
-def rules_for_account(session: Session, owner_id: uuid.UUID, account_id: uuid.UUID
+def rules_for_account(session: Session, workspace_id: uuid.UUID, account_id: uuid.UUID
                       ) -> list[AlertRule]:
     """Enabled rules of the owner covering this account (account-wide, per-resource, or global)."""
     resource_ids = select(Resource.id).where(Resource.account_id == account_id)
     return list(session.scalars(
         select(AlertRule).where(
-            AlertRule.owner_id == owner_id, AlertRule.is_enabled.is_(True),
+            AlertRule.workspace_id == workspace_id, AlertRule.is_enabled.is_(True),
             AlertRule.deleted_at.is_(None),
             or_(AlertRule.account_id == account_id,
                 AlertRule.resource_id.in_(resource_ids),
                 (AlertRule.account_id.is_(None)) & (AlertRule.resource_id.is_(None))))))
 
 
-def owner_has_rules(session: Session, owner_id: uuid.UUID) -> bool:
+def owner_has_rules(session: Session, workspace_id: uuid.UUID) -> bool:
     return bool(session.scalar(
         select(func.count()).select_from(AlertRule)
-        .where(AlertRule.owner_id == owner_id, AlertRule.deleted_at.is_(None))))
+        .where(AlertRule.workspace_id == workspace_id, AlertRule.deleted_at.is_(None))))
 
 
 def unresolved(session: Session, rule_id: uuid.UUID) -> dict[uuid.UUID, Alert]:

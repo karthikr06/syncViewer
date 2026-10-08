@@ -1,7 +1,7 @@
 """Deterministic, owner-scoped analysis tools.
 
 Code computes, the LLM explains: every number the agent quotes comes from here. Each function
-takes (session, owner_id, ...) -- the owner comes from the authenticated request, never from the
+takes (session, workspace_id, ...) -- the owner comes from the authenticated request, never from the
 model -- and reads through the same owner-scoped repositories as the API. Resources may be given
 by id, external id or exact name; anything not owned by the caller is simply "not found".
 """
@@ -270,7 +270,7 @@ def save_recommendation(session: Session, owner: uuid.UUID, resource: str, categ
     if existing is not None:
         return {"saved": False, "reason": "already exists", "id": existing.id}
     rec: Recommendation = rec_repo.add(
-        session, owner_id=owner, resource_id=res.id if res else None, category=category,
+        session, workspace_id=owner, resource_id=res.id if res else None, category=category,
         severity=severity, title=title, detail=detail, evidence=evidence or {}, source="agent",
         dedupe_key=key)
     session.flush()

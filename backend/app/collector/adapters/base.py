@@ -4,6 +4,10 @@ from typing import Protocol
 from app.collector.dto import AccountRef, MetricSampleDTO, ResourceDTO
 
 
+class ActionRejected(Exception):
+    """The provider refused the action (e.g. starting a VM that is already running)."""
+
+
 class ProviderAdapter(Protocol):
     """Adapters return plain DTOs, never SDK objects."""
 
@@ -16,3 +20,7 @@ class ProviderAdapter(Protocol):
         since: datetime,
         until: datetime,
     ) -> list[MetricSampleDTO]: ...
+
+    def perform_action(self, account: AccountRef, external_id: str, action: str) -> str:
+        """Start, stop, restart or deallocate a VM; returns its new power state."""
+        ...

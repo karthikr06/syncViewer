@@ -42,13 +42,18 @@ DB = Depends(get_db, scope="function")
 
 @dataclass(frozen=True)
 class CurrentUser:
+    """`id` is the person (actor); `workspace_id` scopes every piece of monitored data."""
+
     id: uuid.UUID
     email: str
     role: str
+    workspace_id: uuid.UUID
+    workspace_name: str = ""
+    is_operator: bool = False  # platform operator (ADMIN_EMAILS): may see collector health
 
     @property
     def can_write(self) -> bool:
-        return self.role in ("admin", "user")
+        return self.role in ("admin", "developer")
 
 
 def current_user(
@@ -75,14 +80,17 @@ def current_user(
         email = str(claims.get("email", "")).lower()
         if not email:
             raise HTTPException(401, "token has no email claim")
-        role = "admin" if email in settings.admin_emails else "user"
-        user = user_repo.provision(db, user_id, email, user_repo.ROLE_IDS[role])
-        user_repo.set_audit_user(db, user.id)
+        user_repo.set_audit_user(db, user_id)
+        # joins the workspace that invited this email, or starts a new one as its admin
+        user = user_repo.provision(db, user_id, email, now)
+        if user is None:
+            raise HTTPException(409, "This email is already linked to another account.")
     if not user.is_active:
-        raise HTTPException(403, "This account has been deactivated.")
+        raise HTTPException(403, "Your access to this workspace has been removed.")
     if user.last_login_at is None or now - user.last_login_at > LOGIN_TOUCH_INTERVAL:
         user_repo.touch_login(user, now)
-    return CurrentUser(user.id, user.email, user.role.name)
+    return CurrentUser(user.id, user.email, user.role.name, user.workspace_id,
+                       user.workspace.name, user.email.lower() in settings.admin_emails)
 
 
 def current_user_detached(
@@ -107,13 +115,21 @@ def current_user_detached(
 
 def require_writer(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     if not user.can_write:
-        raise HTTPException(403, "Your role is read-only.")
+        raise HTTPException(403, "Viewers have read-only access.")
     return user
 
 
 def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    """Workspace admin: manages members and invites."""
     if user.role != "admin":
         raise HTTPException(403, "Administrator access required.")
+    return user
+
+
+def require_operator(user: CurrentUser = Depends(current_user)) -> CurrentUser:
+    """Platform operator (ADMIN_EMAILS): sees cross-workspace collector health only."""
+    if not user.is_operator:
+        raise HTTPException(403, "Operator access required.")
     return user
 
 

@@ -11,7 +11,7 @@ from alembic import command
 from app.agent.evals.cases import EVAL_CASES, EvalContext
 from app.collector.adapters import MockAdapter
 from app.collector.cycle import run_cycle
-from app.models import CloudAccount, Resource, User
+from app.models import CloudAccount, Resource, User, Workspace
 from tests.conftest import alembic_cfg
 from tests.test_collector import make_settings
 
@@ -26,9 +26,13 @@ def ctx(make_database):
     factory = sessionmaker(engine, expire_on_commit=False)
     owner, other = uuid.uuid4(), uuid.uuid4()
     with factory() as s:
-        s.add_all([User(id=owner, email="o@x.com"), User(id=other, email="p@x.com")])
+        # each user's workspace shares their id, so `owner` is also the workspace id
+        s.add_all([Workspace(id=owner, name="o"), Workspace(id=other, name="p")])
         s.flush()
-        s.add(CloudAccount(owner_id=owner, provider_id=4, name="m", external_ref="eval-acc",
+        s.add_all([User(id=owner, email="o@x.com", workspace_id=owner),
+                   User(id=other, email="p@x.com", workspace_id=other)])
+        s.flush()
+        s.add(CloudAccount(workspace_id=owner, provider_id=4, name="m", external_ref="eval-acc",
                            config={"scenario": "medium"}))
         s.commit()
     client = TestClient(gen_app)

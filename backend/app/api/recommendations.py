@@ -16,14 +16,14 @@ def list_recommendations(status: str | None = None, category: str | None = None,
                          user: CurrentUser = Depends(current_user),
                          db: Session = DB):
     items, total, page, page_size = owned.list_recommendations(
-        db, user.id, status, category, severity, q, page, page_size)
+        db, user.workspace_id, status, category, severity, q, page, page_size)
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.patch("/{rec_id}", response_model=RecommendationOut)
 def update_status(rec_id: int, body: RecommendationUpdate,
                   user: CurrentUser = Depends(require_writer), db: Session = DB):
-    rec = owned.get_recommendation(db, user.id, rec_id)
+    rec = owned.get_recommendation(db, user.workspace_id, rec_id)
     if rec is None:
         raise not_found("Recommendation")
     rec.status = body.status

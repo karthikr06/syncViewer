@@ -19,10 +19,17 @@ class Page(BaseModel, Generic[T]):
     page_size: int
 
 
+class WorkspaceOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
 class MeOut(BaseModel):
     id: uuid.UUID
     email: str
     role: str
+    workspace: WorkspaceOut
+    is_operator: bool = False
 
 
 class AccountOut(ORM):
@@ -136,6 +143,30 @@ class UserOut(ORM):
     is_active: bool
     created_at: datetime
     last_login_at: datetime | None
+
+
+class InviteOut(BaseModel):
+    id: int
+    email: str
+    role: str
+    created_at: datetime
+
+
+class MembersOut(BaseModel):
+    workspace: WorkspaceOut
+    members: list[UserOut]
+    invites: list[InviteOut]
+
+
+class VmActionOut(BaseModel):
+    id: int
+    action: str
+    status: str
+    from_state: str | None
+    to_state: str | None
+    error: str | None
+    requested_at: datetime
+    requested_by: str | None  # email
 
 
 class CollectorRunOut(ORM):

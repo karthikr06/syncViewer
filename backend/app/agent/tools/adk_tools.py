@@ -1,6 +1,6 @@
 """ADK-facing wrappers: plain typed functions with docstrings (these become the tool schema).
 
-`tool_context` is injected by ADK and hidden from the model. The owner id is read from session
+`tool_context` is injected by ADK and hidden from the model. The workspace id is read from session
 state, which the API sets from the authenticated request -- tools never take a user id argument.
 """
 import uuid
@@ -23,7 +23,7 @@ def configure(factory: sessionmaker[Session]) -> None:
 def _call(tool_context: ToolContext, fn: Callable, *args: Any, **kwargs: Any) -> dict:
     if _factory is None:
         return {"error": "tools are not configured"}
-    owner = tool_context.state.get("owner_id")
+    owner = tool_context.state.get("workspace_id")
     if not owner:
         return {"error": "no authenticated user"}
     with _factory() as session:
@@ -163,7 +163,7 @@ def save_recommendation(tool_context: ToolContext, resource: str, category: str,
     """
     import json
 
-    if tool_context.state.get("role") not in ("admin", "user"):
+    if tool_context.state.get("role") not in ("admin", "developer"):
         return {"error": "read-only account: viewers cannot save recommendations"}
     try:
         evidence = json.loads(evidence_json or "{}")

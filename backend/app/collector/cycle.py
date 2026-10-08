@@ -38,7 +38,7 @@ class CycleResult:
     errors: list[dict] = field(default_factory=list)
 
 
-def _account_ref(account, provider_code: str, settings: Settings) -> AccountRef:
+def account_ref(account, provider_code: str, settings: Settings) -> AccountRef:
     creds = {}
     if account.credentials_encrypted is not None:
         creds = decrypt_credentials(settings.credential_encryption_key,
@@ -54,7 +54,7 @@ def process_account(session: Session, account_id: uuid.UUID, provider_code: str,
     account = account_repo.get(session, account_id)
     if account is None:
         return 0
-    ref = _account_ref(account, provider_code, settings)
+    ref = account_ref(account, provider_code, settings)
     metric_ids = lookups.metric_ids(session)
     type_id = lookups.resource_type_id(session, provider_code, "vm")
     if type_id is None:
@@ -79,9 +79,9 @@ def process_account(session: Session, account_id: uuid.UUID, provider_code: str,
         sample_repo.compute_rollup(session, min(r["ts"] for r in rows),
                                    max(r["ts"] for r in rows))
     incidents.update_incidents(session, resources, metric_ids["availability"], fetch_from)
-    alert_eval.evaluate_rules(session, account.owner_id, account.id, resources,
+    alert_eval.evaluate_rules(session, account.workspace_id, account.id, resources,
                               {v: k for k, v in metric_ids.items()}, now)
-    recommendations.run_recommendation_rules(session, account.owner_id, resources, now,
+    recommendations.run_recommendation_rules(session, account.workspace_id, resources, now,
                                              rule_config)
     account_repo.mark_success(session, account, now)
     session.flush()
@@ -91,7 +91,7 @@ def process_account(session: Session, account_id: uuid.UUID, provider_code: str,
 def _digests(session_factory: sessionmaker[Session], now: datetime) -> None:
     """Daily/weekly digests per owner; failures are logged, never fatal to the cycle."""
     with session_factory() as s:
-        owners = insight_repo.owner_ids_with_accounts(s)
+        owners = insight_repo.workspace_ids_with_accounts(s)
     for owner in owners:
         with session_factory() as s:
             try:

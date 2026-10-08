@@ -3,7 +3,17 @@
 import { api } from "./api";
 import { applyRows, dropResourceData, requestSync } from "./sync";
 import type { LocalDb } from "./db";
-import type { Account, Alert, AlertRule, Digest, EntityName, Recommendation } from "./types";
+import type {
+  Account,
+  Alert,
+  AlertRule,
+  Digest,
+  EntityName,
+  Recommendation,
+  Resource,
+  VmAction,
+  VmActionName,
+} from "./types";
 
 export class OfflineError extends Error {
   constructor() {
@@ -120,4 +130,30 @@ export async function generateDigest(db: LocalDb, days: number): Promise<void> {
   const row = await api<Digest & Row>(`/insights/digests/generate?days=${days}`, { method: "POST" });
   await applyRows(db, "insight_digests", [row]);
   requestSync();
+}
+
+/** Start, stop, restart or deallocate a VM. The local copy reflects the new power state at once;
+ * the next sync brings the server's version (and the collector later confirms it). Optionally
+ * marks the recommendation that suggested the action as done. */
+export async function vmAction(
+  db: LocalDb,
+  resourceId: string,
+  action: VmActionName,
+  recommendationId?: number,
+): Promise<VmAction> {
+  requireOnline();
+  const r = await api<VmAction>(`/resources/${resourceId}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ action, recommendation_id: recommendationId ?? null }),
+  });
+  if (r.to_state) {
+    const power = r.to_state as Resource["power_state"];
+    await db.resources.update(resourceId, {
+      power_state: power,
+      health_state: power === "running" ? "healthy" : "unavailable",
+    });
+  }
+  if (recommendationId) await db.recommendations.update(recommendationId, { status: "done" });
+  requestSync();
+  return r;
 }

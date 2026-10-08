@@ -34,11 +34,17 @@ one helper, `repositories/samples.compute_rollup`.
   server-side with bcrypt).
 - The API verifies the JWT on every request (JWKS for asymmetric keys, HS256 secret for legacy
   projects): signature, expiry, audience `authenticated`, issuer `<SUPABASE_URL>/auth/v1`.
-- The role is read from `users.role_id`, never from the token. The first request provisions the
-  `users` row; emails in `ADMIN_EMAILS` become admin then.
-- `admin`: user management and collector health, **no access to other users' data**.
-  `user`: full CRUD on own data. `viewer`: read-only.
-- Tenant isolation: every repository method takes the owner id; someone else's id is a 404.
+- Data belongs to a **workspace** (a team). Each user belongs to exactly one workspace with one role,
+  read from `users.role_id`, never from the token.
+- First sign-in provisions the `users` row: if a pending `workspace_invites` row exists for the email,
+  the user joins that workspace with the invited role (developer or viewer); otherwise a new workspace
+  is created and the user is its admin.
+- `admin`: everything, plus inviting members, changing their role and removing access.
+  `developer`: everything except team management, including VM power actions. `viewer`: read-only,
+  plus the AI assistant (whose tools are read-only anyway).
+- `ADMIN_EMAILS` marks platform operators, who may see cross-workspace collector health; they get no
+  access to other workspaces' data.
+- Tenant isolation: every repository method takes the workspace id; another workspace's id is a 404.
 - Enforced in three places: API dependencies (authoritative), frontend route guards, menu items.
 
 ## Delta sync
@@ -92,3 +98,11 @@ repositories as the API. A coordinator delegates to an **analyst** (uptime, inci
 anomalies) and an **advisor** (rightsizing, reliability, capacity, waste). The only write is
 `save_recommendation`. With no `GOOGLE_API_KEY` the chat endpoint answers "not configured" and
 everything else keeps working. Each run is recorded in `agent_runs`.
+
+## VM power actions
+`POST /resources/{id}/actions` (admins and developers) calls the provider adapter's
+`perform_action` (start, stop, restart, deallocate). Every attempt is stored in `vm_actions` (who,
+from/to state, result); on success the resource's power state is updated at once, so its version
+bumps and every member's browser sees it on the next sync. A recommendation with a direct fix
+("stopped but not deallocated" -> deallocate) can be fixed in one click, which also marks it done;
+waste advice also closes itself on the next collection once the VM is no longer stopped.

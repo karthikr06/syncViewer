@@ -39,6 +39,13 @@ class Env:
         assert self.client.get("/api/v1/me", headers=headers).status_code == 200
         return uid, headers
 
+    def member(self, admin_headers, email, role="viewer"):
+        """Invite `email` into the admin's workspace, then sign them in (accepts the invite)."""
+        r = self.client.post("/api/v1/workspace/invites", headers=admin_headers,
+                             json={"email": email, "role": role})
+        assert r.status_code == 201, r.text
+        return self.user(email)
+
     def set_role(self, uid, role_id):
         with self.factory() as s:
             s.get(User, uid).role_id = role_id
@@ -81,20 +88,34 @@ def test_requires_valid_token(env):
     assert c.get("/api/v1/me", headers={"Authorization": f"Bearer {forged}"}).status_code == 401
 
 
-def test_me_provisions_user_and_role_comes_from_db(env):
+def test_first_sign_in_creates_a_workspace_and_role_comes_from_db(env):
     c = env.client
-    me = c.get("/api/v1/me", headers=auth(email="a@x.com", role="admin")).json()
-    assert me["role"] == "user"  # a role claim in the token is ignored
-    assert c.get("/api/v1/me", headers=auth(email=ADMIN_EMAIL)).json()["role"] == "admin"
-
-
-def test_viewer_cannot_write(env):
-    uid, h = env.user("v@x.com")
+    uid = uuid.uuid4()
+    me = c.get("/api/v1/me", headers=auth(uid, email="a@x.com", role="viewer")).json()
+    # a role claim in the token is ignored: a new sign-up is the admin of a new workspace
+    assert me["role"] == "admin" and me["workspace"]["name"] == "a's workspace"
+    assert me["is_operator"] is False
     env.set_role(uid, 3)
-    r = env.client.post("/api/v1/cloud-accounts", headers=h, json={
+    assert c.get("/api/v1/me", headers=auth(uid, email="a@x.com")).json()["role"] == "viewer"
+    assert c.get("/api/v1/me", headers=auth(email=ADMIN_EMAIL)).json()["is_operator"] is True
+
+
+def test_viewer_reads_the_workspace_but_cannot_write(env):
+    _, admin = env.user("boss@team.com")
+    new_account(env, admin)
+    _, v = env.member(admin, "v@x.com", "viewer")
+    c = env.client
+    assert c.get("/api/v1/me", headers=v).json()["role"] == "viewer"
+    assert c.get("/api/v1/cloud-accounts", headers=v).json()["total"] == 1  # shared data
+    assert c.get("/api/v1/resources", headers=v).json()["total"] == 5
+    r = c.post("/api/v1/cloud-accounts", headers=v, json={
         "name": "x", "provider": "mock", "external_ref": "x"})
     assert r.status_code == 403
-    assert env.client.get("/api/v1/cloud-accounts", headers=h).status_code == 200
+    rid = c.get("/api/v1/resources", headers=v).json()["items"][0]["id"]
+    assert c.post(f"/api/v1/resources/{rid}/actions", headers=v,
+                  json={"action": "stop"}).status_code == 403
+    assert c.post("/api/v1/workspace/invites", headers=v,
+                  json={"email": "z@x.com"}).status_code == 403
 
 
 def test_tenant_isolation_returns_404(env):
@@ -145,32 +166,105 @@ def test_duplicate_account_conflict_and_unavailable_provider(env):
     assert env.client.get("/api/v1/cloud-accounts", headers=h).json()["total"] == 1
 
 
-def test_admin_routes_and_role_management(env):
-    uid, user_h = env.user("u@x.com")
-    _, admin_h = env.user(ADMIN_EMAIL)
+def test_workspace_members_and_invites(env):
     c = env.client
-    assert c.get("/api/v1/admin/users", headers=user_h).status_code == 403
-    assert c.get("/api/v1/admin/collector-runs", headers=user_h).status_code == 403
-    users = c.get("/api/v1/admin/users?q=u@", headers=admin_h).json()
-    assert users["total"] == 1 and users["items"][0]["email"] == "u@x.com"
-    r = c.patch(f"/api/v1/admin/users/{uid}", headers=admin_h, json={"role": "viewer"})
+    admin_id, admin = env.user("boss@team.com")
+    acc = new_account(env, admin)
+    # invite a developer and a viewer; only admins manage members
+    inv = c.post("/api/v1/workspace/invites", headers=admin,
+                 json={"email": "Dev@Team.com", "role": "developer"})
+    assert inv.status_code == 201 and inv.json()["email"] == "dev@team.com"
+    assert c.post("/api/v1/workspace/invites", headers=admin,
+                  json={"email": "not-an-email", "role": "viewer"}).status_code == 422
+    assert c.post("/api/v1/workspace/invites", headers=admin,
+                  json={"email": "x@team.com", "role": "admin"}).status_code == 422
+    listing = c.get("/api/v1/workspace/members", headers=admin).json()
+    assert [i["email"] for i in listing["invites"]] == ["dev@team.com"]
+    # the invited person signs up and lands in the same workspace with the invited role
+    dev_id, dev = env.user("dev@team.com")
+    me = c.get("/api/v1/me", headers=dev).json()
+    assert me["role"] == "developer" and me["workspace"]["name"] == "boss's workspace"
+    assert c.get(f"/api/v1/cloud-accounts/{acc['id']}", headers=dev).status_code == 200
+    assert c.get("/api/v1/workspace/members", headers=admin).json()["invites"] == []
+    members = c.get("/api/v1/workspace/members", headers=dev).json()
+    assert {m["email"] for m in members["members"]} == {"boss@team.com", "dev@team.com"}
+    assert members["invites"] == []  # only admins see pending invites
+    assert c.post("/api/v1/workspace/invites", headers=dev,
+                  json={"email": "q@x.com"}).status_code == 403
+    # someone who already has an account cannot be invited; members change role instead
+    env.user("solo@else.com")
+    for email in ("solo@else.com", "dev@team.com"):
+        assert c.post("/api/v1/workspace/invites", headers=admin,
+                      json={"email": email}).status_code == 409
+    # role changes and removal
+    r = c.patch(f"/api/v1/workspace/members/{dev_id}", headers=admin, json={"role": "viewer"})
     assert r.json()["role"] == "viewer"
-    assert c.post("/api/v1/cloud-accounts", headers=user_h, json={
+    assert c.post("/api/v1/cloud-accounts", headers=dev, json={
         "name": "x", "provider": "mock", "external_ref": "x"}).status_code == 403
-    c.patch(f"/api/v1/admin/users/{uid}", headers=admin_h, json={"is_active": False})
-    assert c.get("/api/v1/me", headers=user_h).status_code == 403
-    admin_id = next(u["id"] for u in c.get("/api/v1/admin/users", headers=admin_h).json()["items"]
-                    if u["email"] == ADMIN_EMAIL)
-    assert c.patch(f"/api/v1/admin/users/{admin_id}", headers=admin_h,
-                   json={"role": "user"}).status_code == 400
-    assert c.get("/api/v1/admin/collector-runs", headers=admin_h).status_code == 200
+    assert c.patch(f"/api/v1/workspace/members/{admin_id}", headers=admin,
+                   json={"role": "viewer"}).status_code == 400
+    assert c.patch(f"/api/v1/workspace/members/{admin_id}", headers=dev,
+                   json={"is_active": False}).status_code == 403
+    c.patch(f"/api/v1/workspace/members/{dev_id}", headers=admin, json={"is_active": False})
+    assert c.get("/api/v1/me", headers=dev).status_code == 403
+    # revoke a pending invite; rename the workspace
+    inv2 = c.post("/api/v1/workspace/invites", headers=admin, json={"email": "late@x.com"})
+    assert c.delete(f"/api/v1/workspace/invites/{inv2.json()['id']}",
+                    headers=admin).status_code == 204
+    assert c.patch("/api/v1/workspace", headers=admin,
+                   json={"name": "Ops team"}).json()["name"] == "Ops team"
+    # collector health is for platform operators only
+    assert c.get("/api/v1/admin/collector-runs", headers=admin).status_code == 403
+    _, op = env.user(ADMIN_EMAIL)
+    assert c.get("/api/v1/admin/collector-runs", headers=op).status_code == 200
 
 
-def test_admin_cannot_see_other_users_data(env):
+def test_other_workspaces_stay_isolated(env):
     _, a = env.user("a@x.com")
-    _, admin = env.user(ADMIN_EMAIL)
+    _, op = env.user(ADMIN_EMAIL)  # even a platform operator sees only their own workspace
     new_account(env, a)
-    assert env.client.get("/api/v1/resources", headers=admin).json()["total"] == 0
+    assert env.client.get("/api/v1/resources", headers=op).json()["total"] == 0
+    members = env.client.get("/api/v1/workspace/members", headers=op).json()["members"]
+    assert [m["email"] for m in members] == [ADMIN_EMAIL]
+
+
+def test_vm_actions_and_one_click_fix(env):
+    c = env.client
+    _, admin = env.user("boss@team.com")
+    _, dev = env.member(admin, "dev@team.com", "developer")
+    _, outsider = env.user("o@else.com")
+    acc = new_account(env, admin, scenario="medium")
+    c.post(f"/api/v1/cloud-accounts/{acc['id']}/collect-now", headers=admin)
+    vms = c.get("/api/v1/resources?page_size=100", headers=dev).json()["items"]
+    stopped = next(v for v in vms if v["power_state"] == "stopped")
+    running = next(v for v in vms if v["power_state"] == "running")
+    recs = c.get("/api/v1/recommendations?category=waste", headers=dev).json()["items"]
+    waste = next(r for r in recs if r["resource_id"] == stopped["id"])
+    # invalid transitions and other workspaces are refused
+    assert c.post(f"/api/v1/resources/{stopped['id']}/actions", headers=dev,
+                  json={"action": "stop"}).status_code == 409
+    assert c.post(f"/api/v1/resources/{stopped['id']}/actions", headers=outsider,
+                  json={"action": "deallocate"}).status_code == 404
+    # the developer fixes the "stopped but not deallocated" warning in one click
+    r = c.post(f"/api/v1/resources/{stopped['id']}/actions", headers=dev,
+               json={"action": "deallocate", "recommendation_id": waste["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "succeeded" and r.json()["to_state"] == "deallocated"
+    vm = c.get(f"/api/v1/resources/{stopped['id']}", headers=dev).json()
+    assert vm["power_state"] == "deallocated"
+    done = c.get("/api/v1/recommendations?status=done", headers=dev).json()["items"]
+    assert [d["id"] for d in done] == [waste["id"]]
+    # stop a running VM; history records who did what
+    stop = c.post(f"/api/v1/resources/{running['id']}/actions", headers=admin,
+                  json={"action": "stop"})
+    assert stop.json()["to_state"] == "stopped"
+    history = c.get(f"/api/v1/resources/{stopped['id']}/actions", headers=dev).json()
+    assert history[0]["action"] == "deallocate" and history[0]["requested_by"] == "dev@team.com"
+    # the next collection confirms the provider state: only the newly stopped VM is now waste
+    c.post(f"/api/v1/cloud-accounts/{acc['id']}/collect-now", headers=admin)
+    open_waste = c.get("/api/v1/recommendations?category=waste&status=new",
+                       headers=dev).json()["items"]
+    assert {w["resource_id"] for w in open_waste} == {running["id"]}
 
 
 def test_500_is_generic_and_docs_hidden_in_production(env, make_database):

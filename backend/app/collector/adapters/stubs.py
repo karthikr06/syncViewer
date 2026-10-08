@@ -10,6 +10,9 @@ class _NotImplementedAdapter:
     def fetch_metrics(self, account, resources, since, until):
         self._fail()
 
+    def perform_action(self, account, external_id, action):
+        self._fail()
+
 
 class AzureAdapter(_NotImplementedAdapter):
     provider = "Azure (planned for phase 8)"

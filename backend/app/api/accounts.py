@@ -32,15 +32,15 @@ router = APIRouter(prefix="/cloud-accounts", tags=["cloud accounts"])
 def list_accounts(q: str | None = None, status: str | None = None, page: int = 1,
                   page_size: int = Query(25, ge=1, le=100), sort: str | None = None,
                   user: CurrentUser = Depends(current_user), db: Session = DB):
-    items, total, page, page_size = owned.list_accounts(db, user.id, q, status, page, page_size,
-                                                        sort)
+    items, total, page, page_size = owned.list_accounts(
+        db, user.workspace_id, q, status, page, page_size, sort)
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{account_id}", response_model=AccountOut)
 def get_account(account_id: uuid.UUID, user: CurrentUser = Depends(current_user),
                 db: Session = DB):
-    account = owned.get_account(db, user.id, account_id)
+    account = owned.get_account(db, user.workspace_id, account_id)
     if account is None:
         raise not_found("Cloud account")
     return account
@@ -58,8 +58,8 @@ def create_account(body: AccountCreate, request: Request,
     creds = (encrypt_credentials(settings.credential_encryption_key, body.credentials)
              if body.credentials else None)
     try:
-        account = owned.create_account(db, user.id, provider.id, body.name, body.external_ref,
-                                       body.config, creds)
+        account = owned.create_account(db, user.workspace_id, provider.id, body.name,
+                                       body.external_ref, body.config, creds)
     except IntegrityError as exc:
         raise HTTPException(409, "You already added this account.") from exc
 
@@ -83,7 +83,7 @@ def create_account(body: AccountCreate, request: Request,
 def update_account(account_id: uuid.UUID, body: AccountUpdate,
                    user: CurrentUser = Depends(require_writer), db: Session = DB,
                    settings: Settings = Depends(get_settings)):
-    account = owned.get_account(db, user.id, account_id)
+    account = owned.get_account(db, user.workspace_id, account_id)
     if account is None:
         raise not_found("Cloud account")
     if body.name is not None:
@@ -102,7 +102,7 @@ def update_account(account_id: uuid.UUID, body: AccountUpdate,
 @router.delete("/{account_id}", status_code=204)
 def delete_account(account_id: uuid.UUID, user: CurrentUser = Depends(require_writer),
                    db: Session = DB):
-    account = owned.get_account(db, user.id, account_id)
+    account = owned.get_account(db, user.workspace_id, account_id)
     if account is None:
         raise not_found("Cloud account")
     owned.soft_delete_account(db, account, datetime.now(UTC))
@@ -114,7 +114,7 @@ def collect_now(account_id: uuid.UUID, request: Request,
                 db: Session = DB, settings: Settings = Depends(get_settings)):
     if not user.can_write:
         raise HTTPException(403, "Your role is read-only.")
-    account = owned.get_account(db, user.id, account_id)
+    account = owned.get_account(db, user.workspace_id, account_id)
     if account is None:
         raise not_found("Cloud account")
     adapter = request.app.state.adapter_factory(account.provider_code)
