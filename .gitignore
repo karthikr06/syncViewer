@@ -31,3 +31,6 @@ frontend/dev-dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# Coursework documents (kept out of the repo)
+docs/*.docx
