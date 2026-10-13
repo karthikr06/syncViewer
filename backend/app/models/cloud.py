@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -24,12 +25,14 @@ class CloudAccount(Base, VersionMixin, TimestampMixin):
     __tablename__ = "cloud_accounts"
     __table_args__ = (
         CheckConstraint("status IN ('active','paused','error')", name="status_valid"),
-        UniqueConstraint("owner_id", "provider_id", "external_ref", name="uq_cloud_accounts_ref"),
+        UniqueConstraint(
+            "workspace_id", "provider_id", "external_ref", name="uq_cloud_accounts_ref"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=func.gen_random_uuid())
-    owner_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     provider_id: Mapped[int] = mapped_column(ForeignKey("providers.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -89,3 +92,31 @@ class Resource(Base, VersionMixin, TimestampMixin):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class VmAction(Base):
+    """History of power actions taken on a VM from SyncViewer (who, what, result)."""
+
+    __tablename__ = "vm_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('start','stop','restart','deallocate')", name="action_valid"
+        ),
+        CheckConstraint("status IN ('succeeded','failed')", name="status_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    resource_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("resources.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    action: Mapped[str] = mapped_column(String(12), nullable=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    from_state: Mapped[str | None] = mapped_column(String(15))
+    to_state: Mapped[str | None] = mapped_column(String(15))
+    error: Mapped[str | None] = mapped_column(Text)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

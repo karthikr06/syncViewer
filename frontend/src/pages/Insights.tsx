@@ -1,20 +1,52 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import { canWrite, useAuth, useDb } from "../auth/AuthProvider";
 import { Badge, Empty, ErrorNote, PageHeader } from "../components/ui";
 import { api, friendlyError } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { generateDigest } from "../lib/mutations";
 import { useSyncStatus } from "../lib/syncStore";
+import { linkifyMarkdown, useVmIndex } from "../lib/vmLinks";
 import { RecommendationCard } from "./Recommendations";
 
-/** Model/cloud-sourced text is untrusted: markdown is rendered without raw HTML and sanitized. */
+/** Untrusted model text: markdown without raw HTML, sanitized; VM names become in-app links. */
 function Md({ children }: { children: string }) {
+  const vms = useVmIndex();
   return (
-    <div className="prose-sm space-y-2 text-sm [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_table]:w-full [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:text-left">
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{children}</ReactMarkdown>
+    <div className="prose-sm space-y-2 text-sm [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:ml-4 [&_li]:list-disc [&_ol>li]:list-decimal [&_code]:rounded [&_code]:bg-subtle [&_code]:px-1 [&_strong]:font-semibold [&_table]:w-full [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:text-left">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={{
+          a: ({ href, children: label }) =>
+            href?.startsWith("/") ? (
+              <Link className="link font-medium" to={href}>
+                {label}
+              </Link>
+            ) : (
+              <a className="link" href={href} target="_blank" rel="noopener noreferrer">
+                {label}
+              </a>
+            ),
+          code: ({ children: code, className }) => {
+            const text = String(code);
+            const id = vms.byName.get(text);
+            return id && !className ? (
+              <Link className="link font-mono font-medium" to={`/resources/${id}`}>
+                {text}
+              </Link>
+            ) : (
+              <code className={className}>{code}</code>
+            );
+          },
+        }}
+      >
+        {linkifyMarkdown(children, vms)}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -80,18 +112,18 @@ function Chat({ disabled }: { disabled: boolean }) {
         ))}
       </div>
       <div className="mb-3 max-h-96 min-h-[6rem] space-y-3 overflow-y-auto">
-        {msgs.length === 0 && <p className="text-sm text-slate-500">Ask about uptime, incidents, trends or savings.</p>}
+        {msgs.length === 0 && <p className="text-sm text-muted">Ask about uptime, incidents, trends or savings.</p>}
         {msgs.map((m, i) => (
           <div key={i} className={m.from === "me" ? "text-right" : ""}>
-            <div className={`inline-block max-w-full rounded-xl px-3 py-2 text-left ${m.from === "me" ? "bg-sky-600 text-white" : "bg-slate-100 dark:bg-slate-800"}`}>
+            <div className={`inline-block max-w-full rounded-xl px-3 py-2 text-left ${m.from === "me" ? "bg-accent text-white" : "bg-subtle"}`}>
               {m.from === "me" ? m.text : <Md>{m.text}</Md>}
             </div>
             {m.tools && m.tools.length > 0 && (
-              <div className="mt-1 text-xs text-slate-500">used: {[...new Set(m.tools)].join(", ")}</div>
+              <div className="mt-1 text-xs text-muted">used: {[...new Set(m.tools)].join(", ")}</div>
             )}
           </div>
         ))}
-        {busy && <p className="text-sm text-slate-500">Thinking…</p>}
+        {busy && <p className="text-sm text-muted">Thinking…</p>}
         <div ref={end} />
       </div>
       <ErrorNote message={error} />
@@ -104,6 +136,7 @@ function Chat({ disabled }: { disabled: boolean }) {
 }
 
 export function Insights() {
+  const vms = useVmIndex();
   const db = useDb();
   const { role } = useAuth();
   const sync = useSyncStatus();
@@ -117,9 +150,9 @@ export function Insights() {
     }),
     [db],
   );
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
   const offline = sync.state === "offline" || !navigator.onLine;
-  const names = new Map(data.resources.map((r) => [r.id, r.name]));
+  const byId = new Map(data.resources.map((r) => [r.id, r]));
   const latest = data.digests[0];
 
   return (
@@ -165,7 +198,7 @@ export function Insights() {
               <div className="mt-3 space-y-4">
                 {data.digests.slice(1, 8).map((d) => (
                   <div key={d.id}>
-                    <div className="mb-1 text-xs text-slate-500">{fmtDate(d.period_start)} to {fmtDate(d.period_end)}</div>
+                    <div className="mb-1 text-xs text-muted">{fmtDate(d.period_start)} to {fmtDate(d.period_end)}</div>
                     <Md>{d.summary_md}</Md>
                   </div>
                 ))}
@@ -182,7 +215,7 @@ export function Insights() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.recs.slice(0, 8).map((r) => (
-            <RecommendationCard key={r.id} rec={r} resourceName={r.resource_id ? names.get(r.resource_id) : undefined} writer={canWrite(role)} onError={setError} />
+            <RecommendationCard key={r.id} rec={r} resource={r.resource_id ? byId.get(r.resource_id) : undefined} vms={vms} writer={canWrite(role)} onError={setError} />
           ))}
         </div>
       )}

@@ -1,10 +1,12 @@
-"""lock the Supabase auto-generated data API: RLS on, privileges revoked from anon/authenticated
-
-No-op for the role revokes on plain Postgres (tests), where those roles do not exist.
-The API connects as the table owner, which bypasses RLS.
-"""
+"""lock the Supabase data API: RLS on, privileges revoked from anon/authenticated"""
 from alembic import op
-from app.models import Base
+
+# the tables that existed at this revision (frozen; later migrations lock their own tables)
+TABLES = [
+    "audit_log", "collector_runs", "metric_definitions", "providers", "roles", "resource_types",
+    "users", "agent_runs", "cloud_accounts", "insight_digests", "resources", "alert_rules",
+    "incidents", "metric_samples", "recommendations", "uptime_rollups", "alerts",
+]
 
 revision = "0004"
 down_revision = "0003"
@@ -13,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    for t in [*Base.metadata.tables, "alembic_version"]:
+    for t in [*TABLES, "alembic_version"]:
         op.execute(f'ALTER TABLE "{t}" ENABLE ROW LEVEL SECURITY')
     op.execute(
         """
@@ -35,5 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for t in [*Base.metadata.tables, "alembic_version"]:
+    for t in [*TABLES, "alembic_version"]:
         op.execute(f'ALTER TABLE "{t}" DISABLE ROW LEVEL SECURITY')

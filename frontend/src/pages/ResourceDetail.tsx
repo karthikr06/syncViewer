@@ -1,9 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { Link, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { useDb } from "../auth/AuthProvider";
+import { canWrite, useAuth, useDb } from "../auth/AuthProvider";
 import { Badge, Empty, PageHeader, Stat, healthTone, powerTone, severityTone } from "../components/ui";
+import { VmActions } from "../components/VmActions";
 import { duration, fmtDate, pct, uptimePercent } from "../lib/format";
+import { FixButton } from "./Recommendations";
 
 const METRICS = [
   { key: "cpu_percent", label: "CPU %", color: "#0ea5e9" },
@@ -31,6 +33,7 @@ function MetricChart({ points, color }: { points: { t: string; v: number }[]; co
 export function ResourceDetail() {
   const { id = "" } = useParams();
   const db = useDb();
+  const { role } = useAuth();
   const data = useLiveQuery(async () => {
     const resource = await db.resources.get(id);
     if (!resource) return { resource: null as null };
@@ -45,11 +48,11 @@ export function ResourceDetail() {
     return { resource, samples, incidents, rollups, alerts, rules, recs };
   }, [db, id]);
 
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
   if (!data.resource)
     return (
       <Empty>
-        VM not found in your cached data. <Link className="text-sky-600 underline" to="/resources">Back to resources</Link>
+        VM not found in your cached data. <Link className="text-link underline" to="/resources">Back to resources</Link>
       </Empty>
     );
   const { resource, samples, incidents, rollups, alerts, rules, recs } = data;
@@ -90,6 +93,10 @@ export function ResourceDetail() {
         <Stat label="Disk now" value={pct(last("disk_used_percent"), 1)} />
       </div>
 
+      <div className="mt-4">
+        <VmActions resource={resource} />
+      </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {METRICS.map((m) => (
           <div key={m.key} className="card">
@@ -100,7 +107,7 @@ export function ResourceDetail() {
         <div className="card">
           <h2 className="mb-2 font-semibold">Tags</h2>
           {Object.keys(resource.tags).length === 0 ? (
-            <p className="text-sm text-slate-500">No tags.</p>
+            <p className="text-sm text-muted">No tags.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {Object.entries(resource.tags).map(([k, v]) => (
@@ -117,14 +124,14 @@ export function ResourceDetail() {
           {incidents.length === 0 ? (
             <Empty>No incidents recorded.</Empty>
           ) : (
-            <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+            <ul className="divide-y divide-line text-sm">
               {[...incidents]
                 .sort((a, b) => b.started_at.localeCompare(a.started_at))
                 .slice(0, 15)
                 .map((i) => (
                   <li key={i.id} className="flex items-center justify-between py-2">
                     <span>{fmtDate(i.started_at)}</span>
-                    <span className="text-slate-500">{duration(i.started_at, i.ended_at)}</span>
+                    <span className="text-muted">{duration(i.started_at, i.ended_at)}</span>
                     <Badge tone={i.ended_at ? "gray" : "red"}>{i.ended_at ? i.kind : "ongoing"}</Badge>
                   </li>
                 ))}
@@ -141,13 +148,14 @@ export function ResourceDetail() {
                 <li key={a.id} className="flex items-center gap-2">
                   <Badge tone={a.state === "resolved" ? "gray" : "red"}>{a.state}</Badge>
                   <span>{ruleName.get(a.rule_id) ?? "rule"}</span>
-                  <span className="text-slate-500">{fmtDate(a.opened_at)}</span>
+                  <span className="text-muted">{fmtDate(a.opened_at)}</span>
                 </li>
               ))}
               {myRecs.map((r) => (
-                <li key={r.id} className="flex items-center gap-2">
+                <li key={r.id} className="flex flex-wrap items-center gap-2">
                   <Badge tone={severityTone(r.severity)}>{r.category}</Badge>
                   <span>{r.title}</span>
+                  {canWrite(role) && <FixButton rec={r} resource={resource} />}
                 </li>
               ))}
             </ul>

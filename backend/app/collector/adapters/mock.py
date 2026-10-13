@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import httpx
 
+from app.collector.adapters.base import ActionRejected
 from app.collector.dto import AccountRef, MetricSampleDTO, ResourceDTO
 
 HEALTH_BY_POWER = {"running": "healthy", "stopped": "unavailable", "deallocated": "unavailable"}
@@ -72,3 +73,13 @@ class MockAdapter:
             for s in data["series"]
             for ts, v in s["points"]
         ]
+
+    def perform_action(self, account: AccountRef, external_id: str, action: str) -> str:
+        resp = self._client.post(
+            f"/v1/accounts/{account.external_ref}/resources/{external_id}/actions",
+            params={"scenario": self._scenario(account)}, json={"action": action},
+            headers=self._headers)
+        if resp.status_code in (404, 409):
+            raise ActionRejected(resp.json().get("detail", "the provider refused the action"))
+        resp.raise_for_status()
+        return resp.json()["power_state"]

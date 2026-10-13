@@ -4,8 +4,8 @@ const TONES: Record<string, string> = {
   green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   red: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
   amber: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  blue: "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300",
-  gray: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  blue: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
+  gray: "bg-subtle text-ink/80",
 };
 
 export function Badge({ tone = "gray", children }: { tone?: keyof typeof TONES; children: ReactNode }) {
@@ -35,7 +35,7 @@ export function PageHeader({
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
         <h1 className="text-xl font-semibold">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
       </div>
       <div className="flex flex-wrap gap-2">{actions}</div>
     </div>
@@ -44,7 +44,7 @@ export function PageHeader({
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
+    <div className="rounded-xl border border-dashed border-line p-8 text-center text-sm text-muted">
       {children}
     </div>
   );
@@ -53,9 +53,9 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
     <div className="card">
-      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
-      {hint && <div className="text-xs text-slate-500">{hint}</div>}
+      {hint && <div className="text-xs text-muted">{hint}</div>}
     </div>
   );
 }
@@ -81,7 +81,7 @@ export function Pager({
   onPage: (p: number) => void;
 }) {
   return (
-    <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
+    <div className="mt-3 flex items-center justify-between text-sm text-muted">
       <span>{total} total</span>
       <div className="flex items-center gap-2">
         <button className="btn-ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}>

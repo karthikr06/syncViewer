@@ -59,3 +59,15 @@ export async function setState(db: LocalDb, key: string, value: unknown): Promis
 export async function deleteLocalDatabase(userId: string): Promise<void> {
   await Dexie.delete(dbName(userId));
 }
+
+/** Delete other users' local databases (left behind when a session expired instead of signing out). */
+export async function deleteOtherUsersDatabases(userId: string): Promise<void> {
+  try {
+    const all = (await indexedDB.databases?.()) ?? [];
+    for (const d of all) {
+      if (d.name?.startsWith("syncviewer-") && d.name !== dbName(userId)) await Dexie.delete(d.name);
+    }
+  } catch {
+    /* indexedDB.databases() unsupported: nothing we can enumerate */
+  }
+}

@@ -7,18 +7,28 @@ from sqlalchemy.orm import Session
 from app.models import Recommendation
 
 
-def open_by_key(session: Session, owner_id: uuid.UUID, dedupe_key: str) -> Recommendation | None:
+def open_by_key(session: Session, workspace_id: uuid.UUID, dedupe_key: str
+                ) -> Recommendation | None:
     return session.scalar(select(Recommendation).where(
-        Recommendation.owner_id == owner_id, Recommendation.dedupe_key == dedupe_key,
+        Recommendation.workspace_id == workspace_id, Recommendation.dedupe_key == dedupe_key,
         Recommendation.status == "new"))
 
 
-def recently_closed(session: Session, owner_id: uuid.UUID, dedupe_key: str, since: datetime
-                    ) -> bool:
+def recently_dismissed(session: Session, workspace_id: uuid.UUID, dedupe_key: str,
+                       since: datetime) -> bool:
+    """Advice dismissed within the cooldown (not raised again until it expires)."""
     return session.scalar(select(Recommendation.id).where(
-        Recommendation.owner_id == owner_id, Recommendation.dedupe_key == dedupe_key,
-        Recommendation.status.in_(("dismissed", "done")),
+        Recommendation.workspace_id == workspace_id, Recommendation.dedupe_key == dedupe_key,
+        Recommendation.status == "dismissed",
         Recommendation.updated_at >= since).limit(1)) is not None
+
+
+def open_rule_advice(session: Session, workspace_id: uuid.UUID, category: str,
+                     resource_ids: list[uuid.UUID]) -> list[Recommendation]:
+    return list(session.scalars(select(Recommendation).where(
+        Recommendation.workspace_id == workspace_id, Recommendation.status == "new",
+        Recommendation.source == "rule", Recommendation.category == category,
+        Recommendation.resource_id.in_(resource_ids))))
 
 
 def add(session: Session, **fields) -> Recommendation:
@@ -27,4 +37,4 @@ def add(session: Session, **fields) -> Recommendation:
     return rec
 
 
-__all__ = ["add", "open_by_key", "recently_closed", "timedelta"]
+__all__ = ["add", "open_by_key", "open_rule_advice", "recently_dismissed", "timedelta"]

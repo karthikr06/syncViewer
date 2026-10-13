@@ -8,10 +8,10 @@ Browser (React PWA)
   └─ HTTPS ──► API (FastAPI + SQLAlchemy) ──► Supabase Postgres (source of truth)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
-                     owner-scoped tools)             │
+                     workspace-scoped tools)         │
 Collector (APScheduler loop now; Catalyst Cron later) ┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
-                      └─► AzureAdapter (phase 8, not built)
+                      └─► AzureAdapter (planned)
 ```
 
 | Process | Code | Talks to |
@@ -25,7 +25,7 @@ The API and collector never call each other; both read/write Postgres through th
 
 ## Layering (backend)
 `api/` (routers, dependencies) → `services/` (business logic) → `repositories/` (the only place
-queries are built; everything owner-scoped) → `models/` (SQLAlchemy). Raw SQL exists only in
+queries are built; everything workspace-scoped) → `models/` (SQLAlchemy). Raw SQL exists only in
 Alembic migrations (triggers, procedure, views, lockdown). The stored procedure is called through
 one helper, `repositories/samples.compute_rollup`.
 
@@ -34,11 +34,17 @@ one helper, `repositories/samples.compute_rollup`.
   server-side with bcrypt).
 - The API verifies the JWT on every request (JWKS for asymmetric keys, HS256 secret for legacy
   projects): signature, expiry, audience `authenticated`, issuer `<SUPABASE_URL>/auth/v1`.
-- The role is read from `users.role_id`, never from the token. The first request provisions the
-  `users` row; emails in `ADMIN_EMAILS` become admin then.
-- `admin`: user management and collector health, **no access to other users' data**.
-  `user`: full CRUD on own data. `viewer`: read-only.
-- Tenant isolation: every repository method takes the owner id; someone else's id is a 404.
+- Data belongs to a **workspace** (a team). Each user belongs to exactly one workspace with one role,
+  read from `users.role_id`, never from the token.
+- First sign-in provisions the `users` row: if a pending `workspace_invites` row exists for the email,
+  the user joins that workspace with the invited role (developer or viewer); otherwise a new workspace
+  is created and the user is its admin.
+- `admin`: everything, plus inviting members, changing their role and removing access.
+  `developer`: everything except team management, including VM power actions. `viewer`: read-only,
+  plus the AI assistant (whose tools are read-only anyway).
+- `ADMIN_EMAILS` marks platform operators, who may see cross-workspace collector health; they get no
+  access to other workspaces' data.
+- Tenant isolation: every repository method takes the workspace id; another workspace's id is a 404.
 - Enforced in three places: API dependencies (authoritative), frontend route guards, menu items.
 
 ## Delta sync
@@ -82,13 +88,21 @@ list resources and upsert (missing ones are tombstoned) -> fetch metrics since `
 (24 h backfill on first run, 15 min overlap) -> insert samples with `ON CONFLICT DO NOTHING` ->
 `compute_uptime_rollup` for the touched window -> update incidents (>= 2 consecutive failed
 availability samples) -> evaluate alert rules -> run recommendation rules -> set
-`last_collected_at` or `last_error`. Afterwards: daily/weekly digests per owner, raw-sample purge
+`last_collected_at` or `last_error`. Afterwards: daily/weekly digests per workspace, raw-sample purge
 (`RAW_RETENTION_DAYS`), and a `collector_runs` row. Uptime = share of samples with `availability == 1`.
 
 ## Agent
 "Code computes, the LLM explains." Tools are plain Python functions (`agent/tools/impl.py`) that
-take the owner id from the authenticated request (ADK session state) and use the same owner-scoped
+take the workspace id from the authenticated request (ADK session state) and use the same workspace-scoped
 repositories as the API. A coordinator delegates to an **analyst** (uptime, incidents, trends,
 anomalies) and an **advisor** (rightsizing, reliability, capacity, waste). The only write is
 `save_recommendation`. With no `GOOGLE_API_KEY` the chat endpoint answers "not configured" and
 everything else keeps working. Each run is recorded in `agent_runs`.
+
+## VM power actions
+`POST /resources/{id}/actions` (admins and developers) calls the provider adapter's
+`perform_action` (start, stop, restart, deallocate). Every attempt is stored in `vm_actions` (who,
+from/to state, result); on success the resource's power state is updated at once, so its version
+bumps and every member's browser sees it on the next sync. A recommendation with a direct fix
+("stopped but not deallocated" -> deallocate) can be fixed in one click, which also marks it done;
+waste advice also closes itself on the next collection once the VM is no longer stopped.

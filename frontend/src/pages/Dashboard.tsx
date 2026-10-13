@@ -4,9 +4,11 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useDb } from "../auth/AuthProvider";
 import { Badge, Empty, PageHeader, Stat, severityTone } from "../components/ui";
 import { ago, duration, pct, uptimePercent } from "../lib/format";
+import { useVmIndex, VmText } from "../lib/vmLinks";
 
 export function Dashboard() {
   const db = useDb();
+  const vms = useVmIndex();
   const data = useLiveQuery(async () => {
     const [resources, alerts, incidents, rollups, recs, accounts] = await Promise.all([
       db.resources.toArray(),
@@ -19,14 +21,14 @@ export function Dashboard() {
     return { resources, alerts, incidents, rollups, recs, accounts };
   }, [db]);
 
-  if (!data) return <p className="text-slate-500">Loading…</p>;
+  if (!data) return <p className="text-muted">Loading…</p>;
   const { resources, alerts, incidents, rollups, recs, accounts } = data;
   if (accounts.length === 0)
     return (
       <>
         <PageHeader title="Dashboard" />
         <Empty>
-          No cloud accounts yet. <Link className="text-sky-600 underline" to="/accounts">Add one</Link> to
+          No cloud accounts yet. <Link className="text-link underline" to="/accounts">Add one</Link> to
           see your VMs here.
         </Empty>
       </>
@@ -49,7 +51,10 @@ export function Dashboard() {
   const names = new Map(resources.map((r) => [r.id, r.name]));
   const running = resources.filter((r) => r.power_state === "running").length;
   const openIncidents = incidents.filter((i) => !i.ended_at).length;
-  const latest = [...incidents].sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 6);
+  // ongoing outages first (however old), then the most recent resolved ones
+  const latest = [...incidents]
+    .sort((a, b) => (a.ended_at ? 1 : 0) - (b.ended_at ? 1 : 0) || b.started_at.localeCompare(a.started_at))
+    .slice(0, 6);
   const topRecs = [...recs]
     .sort((a, b) => ["critical", "warning", "info"].indexOf(a.severity) - ["critical", "warning", "info"].indexOf(b.severity))
     .slice(0, 5);
@@ -90,13 +95,13 @@ export function Dashboard() {
           {latest.length === 0 ? (
             <Empty>No incidents. 🎉</Empty>
           ) : (
-            <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+            <ul className="divide-y divide-line text-sm">
               {latest.map((i) => (
                 <li key={i.id} className="flex items-center justify-between py-2">
-                  <Link className="text-sky-600 hover:underline" to={`/resources/${i.resource_id}`}>
+                  <Link className="text-link hover:underline" to={`/resources/${i.resource_id}`}>
                     {names.get(i.resource_id) ?? "VM"}
                   </Link>
-                  <span className="text-slate-500">
+                  <span className="text-muted">
                     {ago(i.started_at)} · {duration(i.started_at, i.ended_at)}
                   </span>
                   <Badge tone={i.ended_at ? "gray" : "red"}>{i.ended_at ? "resolved" : "ongoing"}</Badge>
@@ -109,7 +114,7 @@ export function Dashboard() {
         <div className="card lg:col-span-2">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-semibold">Top recommendations</h2>
-            <Link className="text-sm text-sky-600 hover:underline" to="/recommendations">
+            <Link className="text-sm text-link hover:underline" to="/recommendations">
               View all
             </Link>
           </div>
@@ -120,8 +125,8 @@ export function Dashboard() {
               {topRecs.map((r) => (
                 <li key={r.id} className="flex items-center gap-2">
                   <Badge tone={severityTone(r.severity)}>{r.severity}</Badge>
-                  <span className="text-slate-500">{r.category}</span>
-                  <span>{r.title}</span>
+                  <span className="text-muted">{r.category}</span>
+                  <span><VmText text={r.title} index={vms} /></span>
                 </li>
               ))}
             </ul>

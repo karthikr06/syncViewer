@@ -1,7 +1,4 @@
-"""Delta-sync reads: rows of an entity with version > cursor, scoped to one owner.
-
-Soft-deleted rows are returned (tombstones) so clients can remove them locally.
-"""
+"""Delta-sync reads: one workspace's rows with version > cursor, tombstones included."""
 import uuid
 from datetime import datetime, timedelta
 
@@ -26,7 +23,7 @@ ROLLUP_WINDOW = timedelta(days=14)
 
 
 def _owner_accounts(owner: uuid.UUID):
-    return select(CloudAccount.id).where(CloudAccount.owner_id == owner)
+    return select(CloudAccount.id).where(CloudAccount.workspace_id == owner)
 
 
 def _owner_resources(owner: uuid.UUID):
@@ -34,22 +31,22 @@ def _owner_resources(owner: uuid.UUID):
 
 
 def _owner_rules(owner: uuid.UUID):
-    return select(AlertRule.id).where(AlertRule.owner_id == owner)
+    return select(AlertRule.id).where(AlertRule.workspace_id == owner)
 
 
 def _scope(entity: str, owner: uuid.UUID, now: datetime) -> Select:
     if entity == "cloud_accounts":
-        return select(CloudAccount).where(CloudAccount.owner_id == owner)
+        return select(CloudAccount).where(CloudAccount.workspace_id == owner)
     if entity == "resources":
         return select(Resource).where(Resource.account_id.in_(_owner_accounts(owner)))
     if entity == "alert_rules":
-        return select(AlertRule).where(AlertRule.owner_id == owner)
+        return select(AlertRule).where(AlertRule.workspace_id == owner)
     if entity == "alerts":
         return select(Alert).where(Alert.rule_id.in_(_owner_rules(owner)))
     if entity == "recommendations":
-        return select(Recommendation).where(Recommendation.owner_id == owner)
+        return select(Recommendation).where(Recommendation.workspace_id == owner)
     if entity == "insight_digests":
-        return select(InsightDigest).where(InsightDigest.owner_id == owner)
+        return select(InsightDigest).where(InsightDigest.workspace_id == owner)
     if entity == "incidents":
         return select(Incident).where(Incident.resource_id.in_(_owner_resources(owner)))
     if entity == "uptime_rollups":

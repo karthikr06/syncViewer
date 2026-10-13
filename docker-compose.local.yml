@@ -1,5 +1,4 @@
-# Local-only override: runs a throwaway Postgres next to the stack so everything works without a
-# Supabase project (login still needs Supabase Auth, or mint test JWTs with SUPABASE_JWT_SECRET).
+# Local Postgres instead of Supabase's (login still uses Supabase Auth):
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 services:
   db:
@@ -24,8 +23,6 @@ services:
     environment:
       <<: *local_db
       GENERATOR_URL: http://generator:8100
-      # optional: lets you call the API with self-minted HS256 test tokens (never use in production)
-      SUPABASE_JWT_SECRET: ${LOCAL_JWT_SECRET:-}
 
   collector:
     environment:

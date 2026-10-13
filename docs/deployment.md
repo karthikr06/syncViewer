@@ -40,7 +40,7 @@ The collector is a separate process (`python -m app.collector.serve`). Run it wi
 `docker compose up -d collector` on any machine that can reach the database and the provider, or
 trigger `app.collector.handler.handler` from a scheduler such as Zoho Catalyst Cron.
 
-## 5. Custom domain (optional)
+## 5. Custom domain
 DuckDNS (or any DNS) -> a small VM running the compose stack behind Caddy for automatic HTTPS:
 ```
 syncviewer.duckdns.org {

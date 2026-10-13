@@ -1,13 +1,10 @@
-"""Model-in-the-loop eval (local, needs GOOGLE_API_KEY and a populated database).
+"""Ask every eval question through the real agent (needs GOOGLE_API_KEY and a populated database).
 
-    python -m app.agent.evals.run_model --owner <user-uuid>
-
-Asks each eval question through the real agent and checks that the expected VM names appear in
-the reply. Ground truth comes from the generator, so the owner must have a `mock` account whose
-external_ref is passed with --account-ref and scenario with --scenario.
+    python -m app.agent.evals.run_model --owner <workspace-id> --account-ref <ref>
 """
 import argparse
 import sys
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -25,6 +22,7 @@ def main() -> int:
     ap.add_argument("--owner", required=True)
     ap.add_argument("--account-ref", required=True)
     ap.add_argument("--scenario", default="medium")
+    ap.add_argument("--delay", type=float, default=15.0, help="seconds between questions")
     args = ap.parse_args()
     settings = load_settings_or_exit(["DATABASE_URL", "GOOGLE_API_KEY"])
     factory = get_session_factory(settings.database_url)
@@ -45,14 +43,16 @@ def main() -> int:
             by_role.setdefault(r["role"], []).append(names[r["id"]])
         ctx = EvalContext(s, owner, uuid.uuid4(), truth, names, by_role)
         passed = 0
-        for case in EVAL_CASES:
-            expected = case.expected_in_answer(ctx)
-            reply = run_chat(factory, settings, owner, case.question, None).reply
-            ok = all(e.lower() in reply.lower() for e in expected)
+        for i, case in enumerate(EVAL_CASES):
+            if i:
+                time.sleep(args.delay)  # stay under free-tier requests-per-minute limits
+            question = case.ask(ctx)
+            reply = run_chat(factory, settings, owner, question, None).reply
+            ok = case.passes(ctx, reply)
             passed += ok
-            print(f"[{'PASS' if ok else 'FAIL'}] {case.id}: {case.question}")
+            print(f"[{'PASS' if ok else 'FAIL'}] {case.id}: {question}")
             if not ok:
-                print(f"    expected {expected}\n    got: {reply[:300]!r}")
+                print(f"    expected {case.expected_in_answer(ctx)}\n    got: {reply[:300]!r}")
     print(f"{passed}/{len(EVAL_CASES)} passed")
     return 0 if passed == len(EVAL_CASES) else 1
 

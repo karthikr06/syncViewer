@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<
     return (
       <div className="card mx-auto mt-10 max-w-md text-center">
         <h2 className="text-lg font-semibold">Something went wrong</h2>
-        <p className="mt-1 text-sm text-slate-500">This page hit an unexpected problem.</p>
+        <p className="mt-1 text-sm text-muted">This page hit an unexpected problem.</p>
         <button className="btn-primary mt-4" onClick={() => location.reload()}>
           Reload
         </button>

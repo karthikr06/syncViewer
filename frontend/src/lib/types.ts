@@ -1,9 +1,18 @@
-export type Role = "admin" | "user" | "viewer";
+export type Role = "admin" | "developer" | "viewer";
+export type MemberRole = "developer" | "viewer";
+
+export interface Workspace {
+  id: string;
+  name: string;
+}
 
 export interface Me {
   id: string;
   email: string;
   role: Role;
+  workspace: Workspace;
+  /** platform operator: may see collector health across workspaces */
+  is_operator: boolean;
 }
 
 export interface Account {
@@ -126,6 +135,32 @@ export interface AdminUser {
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
+}
+
+export interface Invite {
+  id: number;
+  email: string;
+  role: MemberRole;
+  created_at: string;
+}
+
+export interface Members {
+  workspace: Workspace;
+  members: AdminUser[];
+  invites: Invite[];
+}
+
+export type VmActionName = "start" | "stop" | "restart" | "deallocate";
+
+export interface VmAction {
+  id: number;
+  action: VmActionName;
+  status: "succeeded" | "failed";
+  from_state: string | null;
+  to_state: string | null;
+  error: string | null;
+  requested_at: string;
+  requested_by: string | null;
 }
 
 export interface CollectorRun {

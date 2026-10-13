@@ -42,6 +42,7 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_ENABLE_GOOGLE_AUTH: ${VITE_ENABLE_GOOGLE_AUTH:-false}
     image: ${DOCKERHUB_USER:-local}/syncviewer-frontend:${TAG:-latest}
     environment:
       # allow the browser to call Supabase (login) and the API

@@ -1,7 +1,4 @@
-"""Deterministic recommendation rules. Pure functions over plain facts (no DB, no LLM).
-
-Every finding carries `evidence`: the metric, window, observed values and threshold used.
-"""
+"""Deterministic recommendation rules over plain facts; every finding carries its evidence."""
 from __future__ import annotations
 
 import uuid

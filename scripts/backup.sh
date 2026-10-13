@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# Backup the application schema with the native pg_dump tool (custom format, restorable with
-# pg_restore). Uses a local pg_dump if installed, otherwise runs it from the postgres Docker image.
-#
-#   scripts/backup.sh                 -> backups/syncviewer-YYYYmmdd-HHMMSS.dump
-#   BACKUP_DATABASE_URL=... scripts/backup.sh
-#
-# URL precedence: BACKUP_DATABASE_URL, MIGRATION_DATABASE_URL (direct/session pooler), DATABASE_URL.
-# Do not point this at the transaction pooler (port 6543): pg_dump needs a session connection.
+# pg_dump the public schema to backups/syncviewer-<timestamp>.dump (local pg_dump, else Docker).
+# URL: BACKUP_DATABASE_URL, then MIGRATION_DATABASE_URL, then DATABASE_URL. Not the 6543 pooler.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows: do not rewrite /backups paths passed to docker
 cd "$(dirname "$0")/.."

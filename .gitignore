@@ -24,10 +24,13 @@ __pycache__/
 # Node
 node_modules/
 frontend/dist/
-frontend/dev-dev-dist/
+frontend/dev-dist/
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Coursework documents (kept out of the repo)
+docs/*.docx

@@ -76,5 +76,20 @@ class ChatResponse(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    role: Literal["admin", "user", "viewer"] | None = None
+    """Admins change other members between developer and viewer, or remove their access."""
+    role: Literal["developer", "viewer"] | None = None
     is_active: bool | None = None
+
+
+class InviteCreate(BaseModel):
+    email: str = Field(max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    role: Literal["developer", "viewer"] = "viewer"
+
+
+class WorkspaceUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class VmActionRequest(BaseModel):
+    action: Literal["start", "stop", "restart", "deallocate"]
+    recommendation_id: int | None = None  # mark this recommendation done when the action works

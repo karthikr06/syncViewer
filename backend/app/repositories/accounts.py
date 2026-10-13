@@ -11,14 +11,14 @@ from app.models import CloudAccount, Provider
 @dataclass(frozen=True)
 class CollectableAccount:
     id: uuid.UUID
-    owner_id: uuid.UUID
+    workspace_id: uuid.UUID
     provider_code: str
 
 
 def list_collectable(session: Session) -> list[CollectableAccount]:
     """Active and errored accounts (errored ones are retried); paused/deleted are skipped."""
     rows = session.execute(
-        select(CloudAccount.id, CloudAccount.owner_id, Provider.code)
+        select(CloudAccount.id, CloudAccount.workspace_id, Provider.code)
         .join(Provider, Provider.id == CloudAccount.provider_id)
         .where(CloudAccount.deleted_at.is_(None), CloudAccount.status.in_(("active", "error")),
                Provider.is_enabled.is_(True))
