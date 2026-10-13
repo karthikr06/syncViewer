@@ -8,10 +8,10 @@ Browser (React PWA)
   └─ HTTPS ──► API (FastAPI + SQLAlchemy) ──► Supabase Postgres (source of truth)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
-                     owner-scoped tools)             │
+                     workspace-scoped tools)         │
 Collector (APScheduler loop now; Catalyst Cron later) ┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
-                      └─► AzureAdapter (phase 8, not built)
+                      └─► AzureAdapter (planned)
 ```
 
 | Process | Code | Talks to |
@@ -25,7 +25,7 @@ The API and collector never call each other; both read/write Postgres through th
 
 ## Layering (backend)
 `api/` (routers, dependencies) → `services/` (business logic) → `repositories/` (the only place
-queries are built; everything owner-scoped) → `models/` (SQLAlchemy). Raw SQL exists only in
+queries are built; everything workspace-scoped) → `models/` (SQLAlchemy). Raw SQL exists only in
 Alembic migrations (triggers, procedure, views, lockdown). The stored procedure is called through
 one helper, `repositories/samples.compute_rollup`.
 
@@ -88,12 +88,12 @@ list resources and upsert (missing ones are tombstoned) -> fetch metrics since `
 (24 h backfill on first run, 15 min overlap) -> insert samples with `ON CONFLICT DO NOTHING` ->
 `compute_uptime_rollup` for the touched window -> update incidents (>= 2 consecutive failed
 availability samples) -> evaluate alert rules -> run recommendation rules -> set
-`last_collected_at` or `last_error`. Afterwards: daily/weekly digests per owner, raw-sample purge
+`last_collected_at` or `last_error`. Afterwards: daily/weekly digests per workspace, raw-sample purge
 (`RAW_RETENTION_DAYS`), and a `collector_runs` row. Uptime = share of samples with `availability == 1`.
 
 ## Agent
 "Code computes, the LLM explains." Tools are plain Python functions (`agent/tools/impl.py`) that
-take the owner id from the authenticated request (ADK session state) and use the same owner-scoped
+take the workspace id from the authenticated request (ADK session state) and use the same workspace-scoped
 repositories as the API. A coordinator delegates to an **analyst** (uptime, incidents, trends,
 anomalies) and an **advisor** (rightsizing, reliability, capacity, waste). The only write is
 `save_recommendation`. With no `GOOGLE_API_KEY` the chat endpoint answers "not configured" and

@@ -15,7 +15,7 @@ class _NotImplementedAdapter:
 
 
 class AzureAdapter(_NotImplementedAdapter):
-    provider = "Azure (planned for phase 8)"
+    provider = "Azure (planned)"
 
 
 class AwsAdapter(_NotImplementedAdapter):

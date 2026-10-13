@@ -16,10 +16,8 @@ gantt
     Offline-first frontend               :done, p5, after p4, 3d
     AI agent and evals                   :done, p6, after p4, 2d
     section Delivery
-    Backup/restore, Docker, CI/CD        :p7, after p5, 2d
+    Backup/restore, Docker, CI/CD        :done, p7, after p5, 2d
     Deployment, documentation, demo      :p7b, after p7, 2d
     section Extensions
     Azure adapter, RLS depth, forecasting:p8, after p7b, 5d
 ```
-
-Replace the dates with your real calendar before submission.

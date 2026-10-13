@@ -1,6 +1,6 @@
 # ER diagram
 
-Mermaid source (renders on GitHub). A PNG export (`mmdc -i er-diagram.md`) is a Phase 7 task once Node is available.
+Crow's-foot diagram (renders on GitHub). A Chen-notation version is in [SyncViewer_ER_Diagram.png](SyncViewer_ER_Diagram.png).
 
 ```mermaid
 erDiagram
@@ -18,12 +18,12 @@ erDiagram
     resources ||--o{ incidents : "suffers"
     workspaces ||--o{ alert_rules : "defines"
     metric_definitions ||--o{ alert_rules : "watches"
-    cloud_accounts |o--o{ alert_rules : "scopes (optional)"
-    resources |o--o{ alert_rules : "scopes (optional)"
+    cloud_accounts |o--o{ alert_rules : "scopes"
+    resources |o--o{ alert_rules : "scopes"
     alert_rules ||--o{ alerts : "raises"
     resources ||--o{ alerts : "subject of"
     workspaces ||--o{ recommendations : "receives"
-    resources |o--o{ recommendations : "about (optional)"
+    resources |o--o{ recommendations : "about"
     workspaces ||--o{ insight_digests : "receives"
     resources ||--o{ vm_actions : "acted on"
     users |o--o{ vm_actions : "requests"
