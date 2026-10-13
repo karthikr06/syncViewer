@@ -51,7 +51,8 @@ def make_database(pg_server):
         name = "t_" + uuid.uuid4().hex[:10]
         with psycopg.connect(base, autocommit=True) as c:
             c.execute(f'CREATE DATABASE "{name}"')
-        return to_sa_url(base.rsplit("/", 1)[0] + "/" + name)
+        # Linux uses a socket URI (".../postgres?host=/tmp/..."), so let pgembed build it
+        return to_sa_url(pg_server.get_uri(name))
 
     return _make
 
