@@ -1,10 +1,4 @@
-"""Deterministic, owner-scoped analysis tools.
-
-Code computes, the LLM explains: every number the agent quotes comes from here. Each function
-takes (session, workspace_id, ...) -- the owner comes from the authenticated request, never from the
-model -- and reads through the same owner-scoped repositories as the API. Resources may be given
-by id, external id or exact name; anything not owned by the caller is simply "not found".
-"""
+"""Workspace-scoped analysis tools: every number the agent quotes is computed here."""
 from __future__ import annotations
 
 import hashlib

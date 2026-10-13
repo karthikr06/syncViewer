@@ -16,8 +16,7 @@ def open_by_key(session: Session, workspace_id: uuid.UUID, dedupe_key: str
 
 def recently_dismissed(session: Session, workspace_id: uuid.UUID, dedupe_key: str,
                        since: datetime) -> bool:
-    """Dismissed advice is not re-raised during the cooldown. Advice marked done was fixed, so if
-    the problem comes back it is raised again."""
+    """Advice dismissed within the cooldown (not raised again until it expires)."""
     return session.scalar(select(Recommendation.id).where(
         Recommendation.workspace_id == workspace_id, Recommendation.dedupe_key == dedupe_key,
         Recommendation.status == "dismissed",

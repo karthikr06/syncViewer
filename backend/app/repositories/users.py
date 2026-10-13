@@ -24,9 +24,7 @@ def _with_refs():
 
 
 def get_for_request(session: Session, user_id: uuid.UUID) -> User | None:
-    """The user with role and workspace AND the audit context for this transaction, in one round
-    trip (each round trip to a remote database costs 100+ ms). Returns None for a first login, in
-    which case the caller provisions the user and sets the audit context itself."""
+    """Load the user with role and workspace and set the audit context, in one round trip."""
     row = session.execute(
         select(User, func.set_config("app.user_id", str(user_id), True))
         .options(joinedload(User.role), joinedload(User.workspace))
@@ -40,9 +38,7 @@ def set_audit_user(session: Session, user_id: uuid.UUID) -> None:
 
 
 def provision(session: Session, user_id: uuid.UUID, email: str, now: datetime) -> User | None:
-    """First sign-in: join the workspace that invited this email, or start a new workspace as its
-    admin. Safe under concurrent first requests. Returns None if the email already belongs to a
-    different account."""
+    """First sign-in: join the inviting workspace or start one as admin; None if email is taken."""
     invite = session.scalar(
         select(WorkspaceInvite)
         .where(WorkspaceInvite.email == email, WorkspaceInvite.accepted_at.is_(None))

@@ -24,8 +24,7 @@ _state: dict = {}
 
 
 def _loop() -> asyncio.AbstractEventLoop:
-    """One long-lived event loop in a daemon thread. ADK/genai keep async HTTP clients bound to
-    the loop that created them, so a fresh `asyncio.run` per request would break the second call."""
+    """One persistent event loop: ADK's HTTP clients stay bound to the loop that created them."""
     with _lock:
         loop = _state.get("loop")
         if loop is None or loop.is_closed():
@@ -57,8 +56,7 @@ async def _chat(service, runner, user: str, workspace: str, role: str, session_i
                 message: str):
     from google.genai import types
 
-    # sessions belong to the person (teammates never share a conversation); the data they can
-    # reach is the workspace's
+    # chat sessions are per person; the data they can reach is the workspace's
     session = await service.get_session(app_name=APP_NAME, user_id=user, session_id=session_id)
     if session is None:
         # workspace_id and role come from the authenticated request, never from model output

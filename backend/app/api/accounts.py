@@ -50,8 +50,7 @@ def get_account(account_id: uuid.UUID, user: CurrentUser = Depends(current_user)
 def create_account(body: AccountCreate, request: Request,
                    user: CurrentUser = Depends(require_writer), db: Session = DB,
                    settings: Settings = Depends(get_settings)):
-    """One transaction: the account plus its first resource discovery. If discovery fails the
-    account is not created."""
+    """Create the account and discover its resources in one transaction."""
     provider = owned.provider_by_code(db, body.provider)
     if provider is None or not provider.is_enabled:
         raise HTTPException(400, f"Provider '{body.provider}' is not available.")

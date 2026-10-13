@@ -4,8 +4,7 @@ import { useAuth } from "./auth/AuthProvider";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
 
-// Pages are split into their own chunks; the service worker precaches all of them, so they
-// still load offline.
+// Lazy page chunks; the service worker precaches them all, so they still load offline
 const page = <K extends string>(load: () => Promise<Record<K, () => JSX.Element>>, name: K) =>
   lazy(() => load().then((m) => ({ default: m[name] })));
 const Accounts = page(() => import("./pages/Accounts"), "Accounts");

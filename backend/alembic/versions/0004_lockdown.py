@@ -1,8 +1,4 @@
-"""lock the Supabase auto-generated data API: RLS on, privileges revoked from anon/authenticated
-
-No-op for the role revokes on plain Postgres (tests), where those roles do not exist.
-The API connects as the table owner, which bypasses RLS.
-"""
+"""lock the Supabase data API: RLS on, privileges revoked from anon/authenticated"""
 from alembic import op
 
 # the tables that existed at this revision (frozen; later migrations lock their own tables)

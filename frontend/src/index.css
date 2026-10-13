@@ -2,8 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Semantic colour tokens (RGB channels so Tailwind opacity modifiers work). Text colours meet
-   WCAG AA contrast on their surfaces in both themes. */
+/* Colour tokens as RGB channels so Tailwind opacity modifiers work; text meets WCAG AA. */
 @layer base {
   :root {
     --c-bg: 244 246 250;

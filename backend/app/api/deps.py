@@ -33,10 +33,7 @@ def get_db(request: Request) -> Iterator[Session]:
         session.close()
 
 
-# scope="function": the commit above runs BEFORE the response is sent. With the default scope
-# FastAPI sends the response first, so a client could read stale data right after a write
-# (or get a 2xx for a write whose commit then failed). Use `db: Session = DB` everywhere so
-# auth and the route share one session -- the audit context is set on that transaction.
+# scope="function" commits before the response is sent; auth and the route share this session
 DB = Depends(get_db, scope="function")
 
 
@@ -98,9 +95,7 @@ def current_user_detached(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     settings: Settings = Depends(get_settings),
 ) -> CurrentUser:
-    """Authenticate in a short transaction of its own, for slow endpoints (agent chat) that must
-    not keep a pooled connection -- a real server connection behind Supabase's transaction-mode
-    pooler -- open while they wait on something else."""
+    """Authenticate in its own short transaction so slow endpoints don't hold a connection."""
     session = request.app.state.session_factory()
     try:
         user = current_user(creds, session, settings)

@@ -1,15 +1,10 @@
-"""Deterministic fake-cloud engine.
-
-Everything here is a pure function of (account_ref, scenario, resource index, timestamp).
-No clocks, no global state: the same query always returns the same answer, so any window
-can be backfilled and tests can compare against ground truth.
-"""
+"""Deterministic fake cloud: everything is a pure function of (account, scenario, index, time)."""
 from __future__ import annotations
 
 import hashlib
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 GRID = 300  # seconds; outages are aligned to this grid
 DAY = 86400
@@ -244,5 +239,3 @@ def ground_truth(account_ref: str, scenario: str, start: datetime, end: datetime
     return {"account_ref": account_ref, "scenario": scenario, "start": iso(s_epoch),
             "end": iso(e_epoch), "resources": resources, "faults": faults, "uptime_percent": uptime}
 
-
-__all__ = ["timedelta"]

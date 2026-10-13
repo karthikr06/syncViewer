@@ -1,8 +1,4 @@
-"""baseline: 17 tables
-
-Frozen DDL, generated once from the SQLAlchemy models as they were at this revision. Later schema
-changes are separate migrations, so a fresh database always replays the same history.
-"""
+"""baseline: 17 tables (frozen DDL generated from the models at this revision)"""
 from alembic import op
 
 revision = "0001"

@@ -1,5 +1,4 @@
-/** Writes go to the API (they need a network); the local cache is updated right away with the
- * server's answer and reconciled by the next sync. */
+/** Writes go through the API; the local cache takes the server's answer and the next sync reconciles. */
 import { api } from "./api";
 import { applyRows, dropResourceData, requestSync } from "./sync";
 import type { LocalDb } from "./db";
@@ -132,9 +131,7 @@ export async function generateDigest(db: LocalDb, days: number): Promise<void> {
   requestSync();
 }
 
-/** Start, stop, restart or deallocate a VM. The local copy reflects the new power state at once;
- * the next sync brings the server's version (and the collector later confirms it). Optionally
- * marks the recommendation that suggested the action as done. */
+/** Run a VM power action, update the local copy at once, and optionally mark its recommendation done. */
 export async function vmAction(
   db: LocalDb,
   resourceId: string,
