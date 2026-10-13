@@ -60,8 +60,7 @@ export async function deleteLocalDatabase(userId: string): Promise<void> {
   await Dexie.delete(dbName(userId));
 }
 
-/** A previous user whose session expired (instead of signing out) left their cache behind:
- * remove every other user's database when someone signs in on this device. */
+/** Delete other users' local databases (left behind when a session expired instead of signing out). */
 export async function deleteOtherUsersDatabases(userId: string): Promise<void> {
   try {
     const all = (await indexedDB.databases?.()) ?? [];

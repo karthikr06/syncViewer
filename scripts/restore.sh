@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# Restore a dump made by backup.sh with the native pg_restore tool.
-#
-#   scripts/restore.sh backups/syncviewer-20260101-120000.dump [--yes]
-#   RESTORE_DATABASE_URL=... scripts/restore.sh <file>
-#
-# This DROPS and recreates the objects in the dump (pg_restore --clean --if-exists) inside the
-# target database's public schema. Restore into a fresh/empty database when possible.
+# Restore a backup.sh dump: scripts/restore.sh <file> [--yes]
+# Drops and recreates the dumped objects (pg_restore --clean); prefer an empty database.
 set -euo pipefail
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows: do not rewrite /backups paths passed to docker
 cd "$(dirname "$0")/.."

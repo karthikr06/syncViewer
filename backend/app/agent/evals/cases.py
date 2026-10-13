@@ -1,9 +1,4 @@
-"""Eval cases whose correct answers come from the generator's ground truth.
-
-Each case has a natural-language question, a `check_tools` function that verifies the
-deterministic tools return the right facts (runs in CI, no API key), and `expected_in_answer`
-giving strings a model's reply must contain (used only by the local model-in-the-loop runner).
-"""
+"""Agent eval cases checked against the generator's ground truth (tool checks run in CI)."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -30,9 +25,7 @@ class EvalContext:
 
 @dataclass(frozen=True)
 class EvalCase:
-    """`question` may name a VM by role ({leak}, {idle}, ...): a real user knows their VM names,
-    only the generator knows roles. With `match_any`, one expected string is enough (a scenario
-    can have several VMs with the same role)."""
+    """`question` may name VMs by role ({leak}); with `match_any` one expected name is enough."""
     id: str
     question: str
     check_tools: Callable[[EvalContext], None]

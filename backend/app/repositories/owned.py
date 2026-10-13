@@ -1,8 +1,4 @@
-"""Owner-scoped reads/writes used by the API and agent tools.
-
-Every function takes the owner id and filters by it; a row that belongs to someone else behaves
-exactly like a row that does not exist (callers return 404).
-"""
+"""Workspace-scoped reads and writes; rows of another workspace behave as missing (404)."""
 import uuid
 from datetime import datetime, timedelta
 

@@ -1,9 +1,4 @@
-"""Power actions on demo VMs (start, stop, restart, deallocate).
-
-The fake cloud is otherwise a pure function of time. Actions are an in-memory event log per VM:
-from the moment of an action the VM's power state, and therefore its metrics, change. Restarting
-the generator forgets them, like resetting a lab. With no actions, output is unchanged.
-"""
+"""In-memory power-action log for demo VMs (forgotten when the generator restarts)."""
 import dataclasses
 import threading
 
@@ -43,8 +38,7 @@ def power_state(account_ref: str, vm: Vm, epoch: int | None = None) -> str:
 
 
 def behaviour_at(account_ref: str, vm: Vm, epoch: int) -> Vm | None:
-    """The VM as it behaves at `epoch`: None while it is off (no samples). A VM started from
-    stopped, or restarted, behaves like a healthy normal VM from then on."""
+    """The VM at `epoch`: None while off; a healthy normal VM after a start or restart."""
     last = _last(account_ref, vm, epoch)
     if last is None:
         return None if vm.role == "stopped" else vm

@@ -1,10 +1,6 @@
-"""Model-in-the-loop eval (local, needs GOOGLE_API_KEY and a populated database).
+"""Ask every eval question through the real agent (needs GOOGLE_API_KEY and a populated database).
 
-    python -m app.agent.evals.run_model --owner <workspace-uuid>
-
-Asks each eval question through the real agent and checks that the expected VM names appear in
-the reply. Ground truth comes from the generator, so the workspace must have a `mock` account whose
-external_ref is passed with --account-ref and scenario with --scenario.
+    python -m app.agent.evals.run_model --owner <workspace-id> --account-ref <ref>
 """
 import argparse
 import sys

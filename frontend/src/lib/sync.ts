@@ -16,8 +16,7 @@ export const ENTITIES: EntityName[] = [
   "uptime_rollups",
 ];
 
-/** Re-read this many versions behind the cursor: sequence values can commit out of order, so a
- * strict `> cursor` read could skip a row. Idempotent, version-guarded upserts make it safe. */
+/** Versions re-read behind the cursor, since sequence values can commit out of order. */
 export const SYNC_OVERLAP = 500;
 export const SAMPLE_OVERLAP_MS = 10 * 60_000;
 const SAMPLE_WINDOW_MS = 24 * 3600_000;
@@ -52,11 +51,7 @@ export async function dropResourceData(db: LocalDb, resourceId: string): Promise
   );
 }
 
-/**
- * Apply server rows idempotently:
- *  - tombstones (deleted_at set) remove the local row (and what depends on it),
- *  - otherwise upsert, but never overwrite a newer local version with an older one.
- */
+/** Apply server rows idempotently: tombstones delete, otherwise upsert unless the local row is newer. */
 export async function applyRows(db: LocalDb, entity: EntityName, rows: AnyRow[]): Promise<void> {
   if (!rows.length) return;
   const table = db.table(entity);
@@ -149,8 +144,7 @@ export function syncOnce(db: LocalDb): Promise<void> {
   running = (async () => {
     setSyncStatus({ state: "syncing" });
     try {
-      // entities are independent (tombstones are idempotent and the server soft-deletes children
-      // with their parent), so pull them concurrently: one round trip of latency, not nine
+      // entities are independent, so pull them concurrently
       await Promise.all([...ENTITIES.map((entity) => pullEntity(db, entity)), pullSamples(db)]);
       const at = Date.now();
       await setState(db, "last_sync", at);
@@ -169,8 +163,7 @@ export function syncOnce(db: LocalDb): Promise<void> {
   return running;
 }
 
-/** Starts the background loop: on start, on reconnect, on tab focus, and every interval while the
- * tab is visible. Backs off exponentially after failures. Returns a stop function. */
+/** Background sync on start, reconnect, focus and every interval; backs off on failure. Returns stop. */
 export function startSync(db: LocalDb): () => void {
   let stopped = false;
   let failures = 0;
@@ -178,9 +171,7 @@ export function startSync(db: LocalDb): () => void {
 
   const delay = () => Math.min(5 * 60_000, env.syncIntervalMs * 2 ** failures);
 
-  /** Periodic syncs pause in background tabs; forced ones (start-up, reconnect, an explicit
-   * "sync now" after a change) always run so a page opened in the background, or an embedded
-   * view, never sits on stale data until it is focused. */
+  /** Periodic syncs skip hidden tabs; forced ones (start-up, reconnect, "sync now") always run. */
   const tick = async (force = false) => {
     if (stopped) return;
     if (force || !document.hidden) {

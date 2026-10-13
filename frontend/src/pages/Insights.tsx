@@ -13,8 +13,7 @@ import { useSyncStatus } from "../lib/syncStore";
 import { linkifyMarkdown, useVmIndex } from "../lib/vmLinks";
 import { RecommendationCard } from "./Recommendations";
 
-/** Model/cloud-sourced text is untrusted: markdown is rendered without raw HTML and sanitized.
- * VM names become links to the VM's page (in-app navigation, no page reload). */
+/** Untrusted model text: markdown without raw HTML, sanitized; VM names become in-app links. */
 function Md({ children }: { children: string }) {
   const vms = useVmIndex();
   return (

@@ -1,9 +1,4 @@
-"""Power actions on VMs (start, stop, restart, deallocate) through the provider adapter.
-
-Every attempt is recorded in vm_actions. On success the resource's power state is updated at once
-(its version bumps, so every member's browser picks it up on the next sync); the next collector
-cycle confirms it from the provider.
-"""
+"""VM power actions through the provider adapter; every attempt is recorded in vm_actions."""
 import uuid
 
 from sqlalchemy import select

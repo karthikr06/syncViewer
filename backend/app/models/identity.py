@@ -41,8 +41,7 @@ class Workspace(Base):
 
 
 class User(Base):
-    """id equals the Supabase auth user id (no FK into the auth schema). A user belongs to exactly
-    one workspace, with one role in it."""
+    """id equals the Supabase auth user id; each user has one workspace and one role."""
 
     __tablename__ = "users"
 
@@ -65,8 +64,7 @@ class User(Base):
 
 
 class WorkspaceInvite(Base):
-    """An admin invites an email as developer or viewer; the invite is accepted on that person's
-    first sign-in. Only one pending invite per email."""
+    """Access for an email as developer or viewer, accepted on that person's first sign-in."""
 
     __tablename__ = "workspace_invites"
     __table_args__ = (

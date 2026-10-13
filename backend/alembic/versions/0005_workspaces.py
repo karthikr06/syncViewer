@@ -1,10 +1,6 @@
 """workspaces (teams), invites, developer role, VM action history
 
-- Data moves from per-user to per-workspace ownership. Every existing user becomes the admin of a
-  workspace whose id equals their user id, so the existing owner_id values are already valid
-  workspace ids: the column is renamed and re-pointed, no rows are rewritten.
-- Role "user" becomes "developer"; workspace members are developers or viewers.
-- agent_runs keep the asking user (user_id) rather than the workspace.
+Each existing user becomes admin of a workspace with the same id, so owner_id is renamed in place.
 """
 from alembic import op
 

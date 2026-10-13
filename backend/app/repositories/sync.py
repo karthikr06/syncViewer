@@ -1,7 +1,4 @@
-"""Delta-sync reads: rows of an entity with version > cursor, scoped to one owner.
-
-Soft-deleted rows are returned (tombstones) so clients can remove them locally.
-"""
+"""Delta-sync reads: one workspace's rows with version > cursor, tombstones included."""
 import uuid
 from datetime import datetime, timedelta
 

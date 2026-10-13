@@ -42,8 +42,7 @@ def gather_facts(session: Session, workspace_id: uuid.UUID, resources: list[Reso
 
 def persist_findings(session: Session, workspace_id: uuid.UUID, findings: list[Finding],
                      now: datetime, cfg: RuleConfig) -> int:
-    """Insert new recommendations; leave existing open ones alone unless severity changed;
-    do not re-raise something the user dismissed within the cooldown."""
+    """Insert new findings, update changed severity, skip ones dismissed within the cooldown."""
     changes = 0
     cooldown_start = now - timedelta(days=cfg.closed_cooldown_days)
     for f in findings:
@@ -76,8 +75,7 @@ def run_recommendation_rules(session: Session, workspace_id: uuid.UUID, resource
 
 def resolve_cleared_waste(session: Session, workspace_id: uuid.UUID, resources: list[Resource],
                           findings: list[Finding]) -> int:
-    """Waste advice follows the VM's power state exactly, so it closes itself once the VM is no
-    longer stopped (deallocated here or in the provider's own console)."""
+    """Close waste advice for VMs that are no longer stopped."""
     current = {f.dedupe_key for f in findings}
     cleared = [r for r in rec_repo.open_rule_advice(session, workspace_id, "waste",
                                                     [r.id for r in resources])

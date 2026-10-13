@@ -1,7 +1,6 @@
-"""ADK-facing wrappers: plain typed functions with docstrings (these become the tool schema).
+"""ADK tool wrappers; their docstrings become the tool schema the model sees.
 
-`tool_context` is injected by ADK and hidden from the model. The workspace id is read from session
-state, which the API sets from the authenticated request -- tools never take a user id argument.
+The workspace id comes from session state set by the authenticated request, never from the model.
 """
 import uuid
 from collections.abc import Callable
