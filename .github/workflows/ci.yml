@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync --locked --group dev
       - run: uv run ruff check .
       # tests start an embedded PostgreSQL (pgembed), so no service container is needed
       - run: uv run pytest -q
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync --locked --group dev
       - run: uv run ruff check .
       - run: uv run pytest -q
 

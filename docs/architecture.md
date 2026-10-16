@@ -9,7 +9,7 @@ Browser (React PWA)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
                      workspace-scoped tools)         │
-Collector (APScheduler loop now; Catalyst Cron later) ┘
+Collector (local loop, or a scheduled Cloud Run job) ┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
                       └─► AzureAdapter (planned)
 ```

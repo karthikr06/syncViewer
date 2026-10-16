@@ -1,0 +1,17 @@
+# What `gcloud builds submit` uploads: only what the three Dockerfiles need, never secrets
+.git
+.github
+.env
+.env.*
+backups/
+docs/
+deploy/
+scripts/
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.egg-info/
+frontend/dist/
+*.docx
