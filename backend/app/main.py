@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import accounts, admin, alerting, insights, recommendations, resources, sync
+from app.api import accounts, admin, alerting, insights, internal, recommendations, resources, sync
 from app.api.deps import CurrentUser, current_user
 from app.collector.adapters import ProviderAdapter, get_adapter
 from app.core.config import Settings, load_settings_or_exit
@@ -80,7 +80,7 @@ def create_app(
 
     for r in (accounts.router, resources.router, alerting.rules, alerting.alerts,
               recommendations.router, insights.router, sync.router, admin.router,
-              admin.operator):
+              admin.operator, internal.router):
         v1.include_router(r)
     app.include_router(v1)
     return app

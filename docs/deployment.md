@@ -1,56 +1,125 @@
-# Deployment
+# Deployment (Azure)
 
-Targets: API on a container host (Render / Railway / Koyeb / Fly.io), frontend on a static host
-(Netlify / Cloudflare Pages / Vercel, or the nginx image), collector local or in a container, database
-and auth on Supabase.
+SyncViewer runs on Azure with as little as possible: **one container app** (the API with the demo
+cloud built in) and a **free Static Web App** for the website. Supabase keeps the database and
+login. On an **Azure for Students** subscription nothing can be billed: usage comes out of the
+student credit, and Azure switches services off if the credit runs out.
 
-## 1. Supabase
-1. Create the project (Data API off, or "automatically expose new tables" off; the migrations lock
-   the data API anyway).
-2. Authentication -> Providers: enable Email and Google. Add your site URLs to *Redirect URLs*.
-3. Copy into `.env`: project URL, JWKS URL (`<url>/auth/v1/.well-known/jwks.json`), anon key,
-   the **session pooler** URL as `MIGRATION_DATABASE_URL`, the **transaction pooler** URL as
-   `DATABASE_URL`.
-4. Apply the schema (once, and after every release that adds migrations):
-   ```bash
-   docker compose run --rm migrate
-   ```
+| Part | Runs on | Name |
+|---|---|---|
+| API + demo cloud (generator at `/gen`) | Container Apps, Central India | `syncviewer-api` |
+| Hourly collection | GitHub Actions schedule calls the API (`.github/workflows/collect.yml`) | - |
+| Website | Static Web Apps, free plan | `syncviewer-web` |
+| Container image | Container Registry (Basic) | `syncviewer<id>` |
+| Database and login | Supabase | - |
 
-## 2. API (container host)
-Image: `<dockerhub-user>/syncviewer-backend` (built by CI). Start command is already
-`uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000`. Set these environment variables
-on the host (never commit them):
-`APP_ENV=production`, `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_JWKS_URL`,
-`CREDENTIAL_ENCRYPTION_KEY`, `CORS_ORIGINS=https://<your-frontend>`, `ADMIN_EMAILS`,
-`GENERATOR_URL` + `GENERATOR_API_KEY` (if you keep the demo provider), optional `GOOGLE_API_KEY`.
-Health check path: `/health`. In production `/docs` and `/openapi.json` are disabled.
-A ready-made `render.yaml` is in the repo root.
+```
+Browser ──► Static Web Apps (website)
+   ├──► Supabase Auth (login)
+   └──► syncviewer-api ──► Supabase Postgres
+          └─ /gen: demo cloud, same process
+GitHub Actions (hourly) ──► POST /api/v1/internal/collect ──► collection runs in the background
+```
 
-## 3. Frontend
-Build with the public values (they are baked in at build time):
+## Cost
+- The app **scales to zero** when idle and runs **at most one replica** (0.5 vCPU, 1 GiB).
+  Container Apps' free monthly grant (180,000 vCPU-seconds, 360,000 GiB-seconds, 2 million
+  requests) covers normal use: the hourly collection keeps it awake for a few minutes each hour.
+- **Hourly collection costs nothing**: GitHub Actions wakes the app with one request. Each run
+  fetches what changed since the previous one; after a long pause it catches up on the last
+  24 hours, so a run always finishes in about a minute.
+- **Static Web Apps (Free)** costs nothing. **Log Analytics is off** (it charges per GB).
+- **Container Registry (Basic)** is the only fixed cost, about USD 5 a month from the credit.
+
+## 1. Tools
 ```bash
-cd frontend
-VITE_SUPABASE_URL=... VITE_SUPABASE_ANON_KEY=... VITE_API_URL=https://<api-host> npm run build
+winget install Microsoft.AzureCLI
 ```
-Deploy `dist/` to the static host. Keep `public/_headers` (edit the `connect-src` hosts) so the strict
-CSP is sent. The nginx image does the same through `CSP_CONNECT_SRC`.
+Open a new terminal, then `az login` (a browser opens; approve the two-step verification prompt).
+Personal Microsoft accounts need two-step verification turned on first
+(account.microsoft.com/security). Also needed: **Docker Desktop** (running), Node.js, and the
+GitHub CLI logged in (`gh auth login`) so the deploy can set up the hourly schedule.
 
-## 4. Collector
-The collector is a separate process (`python -m app.collector.serve`). Run it with
-`docker compose up -d collector` on any machine that can reach the database and the provider, or
-trigger `app.collector.handler.handler` from a scheduler such as Zoho Catalyst Cron.
+## 2. Settings in `.env`
+The deploy reads the same `.env` as local runs.
 
-## 5. Custom domain
-DuckDNS (or any DNS) -> a small VM running the compose stack behind Caddy for automatic HTTPS:
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase **transaction pooler** URL (port 6543) |
+| `GENERATOR_API_KEY` | a long random string; protects `/gen` |
+| `COLLECTOR_TOKEN` | secret for the hourly trigger; the deploy creates it if missing |
+| `AZURE_RESOURCE_GROUP` | `syncviewer-rg` (default) |
+| `AZURE_LOCATION` | `centralindia` (default), next to the database |
+| `AZURE_WEB_LOCATION` | `eastasia` (default); the site itself is served worldwide |
+
+Secrets reach Azure through temporary files outside the repo and are stored as Container Apps
+secrets; they never appear on the command line or in git.
+
+## 3. Deploy
+From the repo root:
+```bash
+backend/.venv/Scripts/python deploy/azure/deploy.py
 ```
-syncviewer.duckdns.org {
-    reverse_proxy frontend:80
-}
-api.syncviewer.duckdns.org {
-    reverse_proxy api:8000
-}
-```
+Add `--dry-run` to print every command first. The script:
 
-## 6. Backups
-`scripts/backup.sh` / `scripts/restore.sh` (see README). Schedule `backup.sh` with cron or Task
-Scheduler against the session-pooler/direct URL.
+1. checks the login, registers the resource providers and creates the resource group;
+2. builds one image (`deploy/azure/Dockerfile`: backend + generator) and pushes it;
+3. creates the Container Apps environment (logs off) and the Static Web App if they are missing;
+4. deploys `syncviewer-api` and stores the hourly trigger's secret and the API address in the
+   GitHub repository;
+5. builds the website with the API's address and uploads it, and stores the website's deploy
+   token in GitHub so pushes to `main` republish it (`.github/workflows/web.yml`).
+
+Run the same command after every change. `--skip-web` leaves the website alone; `--skip-image`
+reuses the last image (settings only).
+
+The two GitHub workflows run from the `main` branch: the hourly collection starts once
+`collect.yml` is merged into `main`. Until then, use **Collect now** or run the workflow from the
+repository's Actions tab.
+
+## 4. The public link
+`https://<name>.azurestaticapps.net`, printed at the end of the deploy. It is public and HTTPS;
+every page needs a login, and each person only sees their own workspace. A custom domain can be
+added for free in the portal (Static Web Apps > Custom domains). The first visit after a quiet
+period takes a few seconds while the API starts.
+
+## 5. Supabase settings
+Supabase > your project > **Authentication**:
+
+1. **URL Configuration**
+   - Site URL: the website address.
+   - Redirect URLs: add `<website address>/**`; keep `http://localhost:5173/**` for local work.
+   Confirmation and password-reset emails link here.
+2. **Sign In / Providers > Email**
+   - **Confirm email: on**, so nobody can sign up with someone else's address. The sign-up page
+     already tells new users to check their inbox.
+   - **Secure email change: on**; minimum password length 8 or more.
+3. **Emails > SMTP Settings**: Supabase's built-in sender allows only a few emails an hour. For
+   real users add a free SMTP provider (Resend, Brevo or Zoho ZeptoMail).
+4. Leave **sign-ups enabled**: invited teammates join by signing up with the invited email.
+
+If the database password was ever shared, reset it (Project Settings > Database), update
+`DATABASE_URL` and `MIGRATION_DATABASE_URL` in `.env`, and deploy again with `--skip-web`.
+
+## 6. Day-to-day
+| Task | Command |
+|---|---|
+| Live API logs | `az containerapp logs show -n syncviewer-api -g syncviewer-rg --follow` |
+| Collect now (from the terminal) | `gh workflow run collect.yml` |
+| Schema change | `cd backend && .venv/Scripts/alembic upgrade head`, then deploy |
+| Remaining credit | Azure portal > Subscriptions > Azure for Students |
+| Take everything down | `az group delete -n syncviewer-rg` |
+
+## Troubleshooting
+| Symptom | Fix |
+|---|---|
+| `az login`: "you must use multi-factor authentication" | Turn on two-step verification for the account, then `az login` in a normal terminal (not Cloud Shell). |
+| A region is not allowed | Student subscriptions allow a fixed list of regions; set `AZURE_LOCATION` / `AZURE_WEB_LOCATION` to an allowed one. |
+| `docker` errors | Start Docker Desktop. |
+| API health check does not respond | `az containerapp logs show -n syncviewer-api -g syncviewer-rg --follow`; usually a missing `.env` value. |
+| Website loads but data does not (CORS error in the browser console) | Open the site through its printed address; the API only accepts that origin. |
+| Login emails link to localhost | Supabase URL Configuration (step 5). |
+
+## Backups
+`scripts/backup.sh` / `scripts/restore.sh`. Run `backup.sh` regularly against the session-pooler
+URL (`MIGRATION_DATABASE_URL`); the free Supabase plan has no point-in-time recovery.

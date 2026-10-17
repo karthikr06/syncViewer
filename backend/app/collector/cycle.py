@@ -64,6 +64,8 @@ def process_account(session: Session, account_id: uuid.UUID, provider_code: str,
     resources = resource_repo.sync_inventory(session, account.id, type_id, dtos, now)
 
     since = account.last_collected_at or (now - timedelta(hours=backfill_hours))
+    # after a long pause catch up on the last `backfill_hours` only, so one cycle stays short
+    since = max(since, now - timedelta(hours=backfill_hours))
     fetch_from = since - OVERLAP
     by_ext = {r.external_id: r for r in resources}
     live = [d for d in dtos if d.external_id in by_ext]

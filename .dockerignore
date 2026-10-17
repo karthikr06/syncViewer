@@ -1,0 +1,11 @@
+# Only for builds from the repo root (deploy/azure/Dockerfile): send just the two Python apps
+*
+!backend
+!generator
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+backend/tests
+generator/tests
