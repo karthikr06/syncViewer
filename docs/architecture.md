@@ -9,7 +9,7 @@ Browser (React PWA)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
                      workspace-scoped tools)         │
-Collector (local loop, or hourly in the API via a GitHub Actions trigger) ┘
+Collector ─────────────────────────────────────────────┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
                       └─► AzureAdapter (planned)
 ```
@@ -21,7 +21,15 @@ Collector (local loop, or hourly in the API via a GitHub Actions trigger) ┘
 | Generator | `generator/syncgen/` | nothing (pure function of time) |
 | Frontend | `frontend/` | API, Supabase Auth |
 
-The API and collector never call each other; both read/write Postgres through the same repositories.
+The collector reads and writes Postgres through the same repositories as the API. Locally it runs
+as its own process (`app.collector.serve`, every `COLLECT_INTERVAL_SECONDS`).
+
+## Hosting
+In production everything except the website runs in **one container** on Azure Container Apps:
+`app/combined.py` serves the API with the generator mounted at `/gen`, and a GitHub Actions
+schedule calls `POST /api/v1/internal/collect` hourly, which runs a collection cycle in a background
+thread. The app scales to zero between requests. The website is a static build on Azure Static Web
+Apps. Details: [deployment.md](deployment.md).
 
 ## Layering (backend)
 `api/` (routers, dependencies) → `services/` (business logic) → `repositories/` (the only place
@@ -30,8 +38,8 @@ Alembic migrations (triggers, procedure, views, lockdown). The stored procedure 
 one helper, `repositories/samples.compute_rollup`.
 
 ## Auth and RBAC
-- The browser logs in with Supabase Auth (Google OAuth or email/password; Supabase hashes passwords
-  server-side with bcrypt).
+- The browser logs in with Supabase Auth (email/password, or Google once enabled; Supabase hashes
+  passwords server-side with bcrypt).
 - The API verifies the JWT on every request (JWKS for asymmetric keys, HS256 secret for legacy
   projects): signature, expiry, audience `authenticated`, issuer `<SUPABASE_URL>/auth/v1`.
 - Data belongs to a **workspace** (a team). Each user belongs to exactly one workspace with one role,
@@ -85,7 +93,7 @@ Metric samples are append-only: cursor is the newest `ts`; the client asks from 
 ## Collector cycle
 Per active account (own transaction and failure domain, small random jitter between accounts):
 list resources and upsert (missing ones are tombstoned) -> fetch metrics since `last_collected_at`
-(24 h backfill on first run, 15 min overlap) -> insert samples with `ON CONFLICT DO NOTHING` ->
+(at most the last 24 h, 15 min overlap) -> insert samples with `ON CONFLICT DO NOTHING` ->
 `compute_uptime_rollup` for the touched window -> update incidents (>= 2 consecutive failed
 availability samples) -> evaluate alert rules -> run recommendation rules -> set
 `last_collected_at` or `last_error`. Afterwards: daily/weekly digests per workspace, raw-sample purge
