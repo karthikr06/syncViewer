@@ -47,6 +47,8 @@ class Settings:
     migration_database_url: str = field(default="")
     supabase_url: str = field(default="")
     sync_overlap: int = field(default=500)
+    collector_token: str = field(default="")
+    agent_timeout_seconds: int = field(default=120)
 
     @property
     def is_production(self) -> bool:
@@ -82,6 +84,8 @@ def load_settings(required: list[str] | None = None) -> Settings:
         generator_api_key=env("GENERATOR_API_KEY", ""),
         google_api_key=env("GOOGLE_API_KEY", ""),
         gemini_model=env("GEMINI_MODEL", "gemini-3.5-flash-lite"),
+        collector_token=env("COLLECTOR_TOKEN", ""),
+        agent_timeout_seconds=int(env("AGENT_TIMEOUT_SECONDS", "120")),
     )
 
 

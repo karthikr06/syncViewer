@@ -1,180 +1,166 @@
-# Deployment (Google Cloud)
+# Deployment (Zoho Catalyst)
 
-SyncViewer runs on Google Cloud Run in Mumbai (`asia-south1`), next to the Supabase database. One
-script builds and deploys everything; the result is a public HTTPS link anyone can open.
+The backend runs on **Catalyst AppSail** and the website on **Catalyst Slate**; the database and
+login stay on Supabase. With **Catalyst for Students** this is free: no card is needed, and when the
+student allowance runs out the apps are stopped instead of billed.
+(A Google Cloud setup is also available: [deployment-gcp.md](deployment-gcp.md).)
 
-## What runs where
 | Part | Runs on | Name |
 |---|---|---|
-| Website (React app, served by nginx) | Cloud Run service | `syncviewer-web` |
-| API | Cloud Run service | `syncviewer-api` |
-| Demo cloud (generator) | Cloud Run service | `syncviewer-gen` |
-| Collector | Cloud Run job, started by Cloud Scheduler | `syncviewer-collector` / `syncviewer-collect` |
-| Container images | Artifact Registry | `syncviewer` |
-| Database and login | Supabase (unchanged) | - |
+| API | AppSail service (container image `backend/Dockerfile`) | `syncviewerapi` |
+| Demo cloud (generator) | AppSail service (container image `generator/Dockerfile`) | `syncviewergen` |
+| Collector | Catalyst Job Scheduling: a cron calls the API every 30 minutes | - |
+| Website | Slate, built from this GitHub repo (`frontend/`) | - |
+| Database and login | Supabase | - |
 
 ```
-Browser ──► syncviewer-web  (static app)
-   │
-   ├──► Supabase Auth (login)
-   └──► syncviewer-api ──► Supabase Postgres
-                 │
-Cloud Scheduler ─┼─► syncviewer-collector (every 30 min) ──► Supabase Postgres
-                 └──────────────┴──► syncviewer-gen (demo cloud)
+Browser ──► Slate (website) ──► AppSail syncviewerapi ──► Supabase Postgres
+   └──► Supabase Auth              ▲          └──► AppSail syncviewergen (demo cloud)
+Job Scheduling (every 30 min) ─────┘  POST /api/v1/internal/collect
 ```
 
-## Cost
-Everything is set up to stay inside Google Cloud's free tier:
+### How AppSail shapes the setup
+- **Requests end after 30 seconds.** The scheduled collector therefore calls
+  `POST /api/v1/internal/collect`, which starts the cycle in the background and answers at once.
+  AI chat answers within 25 seconds (`AGENT_TIMEOUT_SECONDS`).
+- **Idle apps sleep.** An instance stops a few minutes after its last request; the next visit
+  takes a few seconds while it starts.
+- **Development environment.** New projects run in Catalyst's Development environment, which is
+  free and gives each app a public URL. Production requires a payment method; a student project
+  can stay in Development.
 
-- Each service runs **at most one instance** and **scales to zero** when idle.
-- CPU is billed **only while a request is handled**.
-- The collector runs every 30 minutes, never retries, and times out after 15 minutes.
-- Artifact Registry keeps only the **two newest builds** of each image.
-- Optional **budget kill switch**: email alerts at 50%, 90% and 100% of a monthly budget, and billing
-  is unlinked (everything stops) when the budget is reached.
+## 1. Accounts and tools
+1. **Catalyst account**: sign up at https://catalyst.zoho.com/students/. Choose the **India** data
+   centre if asked (catalyst.zoho.in), so the backend runs close to the Supabase database in Mumbai.
+   There is no student switch in the console: the Development environment is free, and without a
+   card on file nothing can be charged. For more usage than the free limits, email
+   support@zohocatalyst.com with your student details and project description.
+2. **Catalyst CLI** (Node.js is already installed):
+   ```bash
+   npm install -g zcatalyst-cli
+   ```
+   ```bash
+   catalyst login
+   ```
+3. **Docker Desktop**: start it before building the images.
+4. **Supabase**: the project must be active (restore it from the dashboard if it was paused).
 
-Expected cost: nothing. If anything, a few rupees a month for image storage above the free 0.5 GB.
-Budget figures reach Google's billing system a few hours late, so the kill switch can overshoot the
-budget slightly.
+## 2. Create the Catalyst project
+1. Catalyst console > **Create Project**, name it `SyncViewer`.
+2. Link this folder to it (once):
+   ```bash
+   cd deploy/catalyst
+   ```
+   ```bash
+   catalyst init
+   ```
+   Select the `SyncViewer` project. No other features need to be set up here; the backend is
+   deployed as standalone AppSail services. `catalyst init` creates `catalyst.json` and
+   `.catalystrc` in this folder.
 
-## 1. Prerequisites
-- A Google account with a payment method. Google requires one even for free-tier use.
-- The Google Cloud CLI:
-  ```bash
-  winget install Google.CloudSDK
-  ```
-  Open a new terminal afterwards so `gcloud` is on the PATH, then sign in:
-  ```bash
-  gcloud auth login
-  ```
-- The backend virtual environment (`backend/.venv`), already used for local runs.
-- `.env` filled in for local use (Supabase URLs, keys, `CREDENTIAL_ENCRYPTION_KEY`, ...).
-
-## 2. Create the Google Cloud project
-1. Open https://console.cloud.google.com and create a project, for example `syncviewer`.
-   Note the **project ID** shown under the name (it can differ from the name).
-2. Billing > Link a billing account to the project. A new account may be offered free trial credit;
-   accepting it is fine.
-
-## 3. Settings in `.env`
-| Variable | Value |
-|---|---|
-| `GCP_PROJECT_ID` | the project ID from step 2 |
-| `GCP_REGION` | `asia-south1` (keep the app next to the database) |
-| `COLLECT_SCHEDULE` | `*/30 * * * *` (cron, India time) |
-| `BUDGET_AMOUNT` | monthly budget in the billing account's currency, e.g. `100INR` |
-| `GENERATOR_API_KEY` | a long random string; the demo cloud is public and checks it |
-| `DATABASE_URL` | Supabase **transaction pooler** URL (port 6543) |
-
-Everything else (`SUPABASE_URL`, `SUPABASE_JWKS_URL`, `VITE_SUPABASE_ANON_KEY`,
-`CREDENTIAL_ENCRYPTION_KEY`, `ADMIN_EMAILS`, `GOOGLE_API_KEY`, `GEMINI_MODEL`) is read from the
-same file. Secrets are passed to Cloud Run through a temporary file outside the repo; they never
-appear on the command line or in git.
-
-Use the Gemini key from your own AI Studio project **without billing**. A key created inside the
-billed Google Cloud project would make chat usage chargeable.
-
-## 4. Budget and kill switch (once)
+## 3. Deploy the backend (AppSail)
+From the repo root:
 ```bash
-backend/.venv/Scripts/python deploy/gcp/deploy.py budget
+backend/.venv/Scripts/python deploy/catalyst/deploy.py build
 ```
-This enables the billing APIs, creates the `syncviewer` budget with email alerts, and deploys a
-small function that unlinks billing from the project when the budget is reached. Run it before the
-first deploy.
-
-## 5. Deploy
 ```bash
-backend/.venv/Scripts/python deploy/gcp/deploy.py deploy
+backend/.venv/Scripts/python deploy/catalyst/deploy.py deploy
 ```
-Add `--dry-run` to print the gcloud commands without running anything. The script:
+`build` creates the two images for linux/amd64; `deploy` uploads them as `syncviewerapi`
+(port 8000) and `syncviewergen` (port 8100). Add `--dry-run` to see the commands first.
 
-1. checks the CLI login and that billing is enabled, and enables the required APIs;
-2. creates the image registry with its cleanup policy and two service accounts with no
-   permissions on the project (one runs the services, one may only start the collector job);
-3. builds the three images with Cloud Build (a few minutes, within its free build minutes);
-4. deploys the demo cloud, API and website;
-5. deploys the collector job and schedules it;
-6. checks `/health` and prints the public link.
+In the console, open **AppSail** and for each service:
+- note its **URL**;
+- **Configuration > Memory**: 1024 MB for `syncviewerapi`, 256 MB for `syncviewergen`.
 
-The first deploy takes about 10 minutes. Run the same command after every change; it only
-replaces what changed. Schema changes (new Alembic migrations) are applied from your machine
-before deploying:
-```bash
-cd backend && .venv/Scripts/alembic upgrade head
-```
+The API will not start until its environment variables are set in step 5.
 
-## 6. The public link
-The website's address is printed at the end of the deploy:
-```
-https://syncviewer-web-<project-number>.asia-south1.run.app
-```
-It is public and HTTPS, it does not change between deploys, and anyone with the link can open it.
-Data stays private: every page needs a login, and each person only sees their own workspace.
+## 4. Deploy the website (Slate, from GitHub)
+1. Console > **Slate** > create an app > **Deploy from Git** > connect GitHub and pick the
+   `syncViewer` repository and the branch to publish (`main`).
+2. Framework **React / Vite**; root path **`frontend`**; build command `npm run build`; output
+   path **`dist`**.
+3. **Configuration > Environment Variables**: add `VITE_API_URL` (the `syncviewerapi` URL),
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` and `VITE_ENABLE_GOOGLE_AUTH=false`.
+4. Deploy, and note the website URL (`https://<name>.onslate.in`). Turn on **auto-deploy** so every
+   push to the branch publishes the site.
 
-Share that link. The first visit after a quiet period takes a few seconds while Cloud Run starts
-the services; after that the app (a PWA) loads instantly from the browser's cache.
+## 5. Connect the pieces
+1. Add to `.env`:
+   ```
+   CATALYST_API_URL=<syncviewerapi URL>
+   CATALYST_GEN_URL=<syncviewergen URL>
+   CATALYST_WEB_URL=<Slate website URL>
+   COLLECTOR_TOKEN=<long random string>
+   ```
+   Make sure `GENERATOR_API_KEY` is a long random string too; the demo cloud is public.
+2. Generate the console values:
+   ```bash
+   backend/.venv/Scripts/python deploy/catalyst/deploy.py env
+   ```
+   This writes `deploy/catalyst/.secrets/console-values.txt` (git-ignored). It lists every
+   environment variable for each AppSail service and for Slate, and the scheduled job's settings.
+3. Paste each section into the matching console screen (**AppSail > service > Configuration >
+   Environment Variables**, and Slate's), save, and redeploy or restart the services.
+4. Delete `console-values.txt` when you are done; it contains secrets.
 
-### A shorter or custom link
-- **Free, shorter link:** Firebase Hosting can serve the website at `https://<project-id>.web.app`
-  and supports a custom domain with free HTTPS. This is a separate, optional step; the deploy
-  script would build the website for Firebase instead of Cloud Run.
-- **Own domain on Cloud Run in Mumbai:** Cloud Run's built-in domain mapping is not available in
-  `asia-south1`; the alternative is a load balancer, about USD 18 a month. Not recommended here.
+## 6. Schedule the collector
+Console > **Job Scheduling**:
+1. Create a **Job Pool** of type **Webhook**.
+2. Create a **Pre-defined Cron**, every 30 minutes, that submits a job to that pool with:
+   - Method `POST`
+   - URL `<syncviewerapi URL>/api/v1/internal/collect`
+   - Header `X-Collector-Token: <COLLECTOR_TOKEN>`
 
-If you change the link, add the new address to the Supabase URL configuration below and to
-`CORS_ORIGINS`.
+   If headers cannot be set, use the URL
+   `<syncviewerapi URL>/api/v1/internal/collect?token=<COLLECTOR_TOKEN>` instead.
+
+The endpoint answers `202 started` (or `already running`); without the right token it answers 404.
+Use **Collect now** on the Accounts page for fresh data between runs. Regular runs also keep the
+free Supabase project from pausing.
 
 ## 7. Supabase settings
-Supabase > your project:
+Supabase > your project > **Authentication**:
 
-1. **Authentication > URL Configuration**
-   - Site URL: the public link from step 6.
-   - Redirect URLs: add `<public link>/**`. Keep `http://localhost:5173/**` for local work.
+1. **URL Configuration**
+   - **Site URL**: the Slate website URL. Confirmation and reset emails link here.
+   - **Redirect URLs**: add `<website URL>/**`, and keep `http://localhost:5173/**` for local work.
+2. **Sign In / Providers > Email**
+   - **Confirm email: on.** New users must click the link in their email before they can log in,
+     so nobody can sign up with someone else's address. The sign-up page already tells them to
+     check their inbox.
+   - **Secure email change: on** (both the old and the new address must confirm).
+   - Minimum password length 8 or more.
+3. **Emails > SMTP Settings**: Supabase's built-in sender is meant for testing and allows only a
+   few emails per hour. For real users, add a free SMTP provider (Resend, Brevo or Zoho
+   ZeptoMail): host, port, username and password from the provider, and a sender address on a
+   domain you control.
+4. **Emails > Templates** (optional): adjust the confirmation and reset emails' wording.
+5. **Rate Limits**: keep the defaults.
+6. **Sign-ups** stay enabled: invited teammates join by signing up with the invited email.
 
-   Without this, password-reset emails link to localhost.
-2. **Authentication > Sign In / Providers > Email**: turn **Confirm email** back on for a public
-   site, so nobody can sign up with someone else's address.
-3. **Authentication > Emails > SMTP Settings** (recommended once others use the app): Supabase's
-   built-in sender only allows a few emails per hour. A free SMTP provider (for example Resend or
-   Brevo) removes that limit.
-4. **Sign-ups:** anyone with the link can sign up and gets an empty workspace of their own. Invited
-   teammates need sign-ups enabled, so leave them on unless the app is private to your team.
-5. **Database password:** if it was ever shared, reset it (Project Settings > Database) and update
-   `DATABASE_URL` and `MIGRATION_DATABASE_URL` in `.env`, then deploy again.
+Also: Project Settings > Database > **reset the database password** if it was ever shared, update
+`DATABASE_URL` and `MIGRATION_DATABASE_URL` in `.env`, run `deploy.py env` again and paste the new
+`DATABASE_URL` into the API's environment variables.
 
-## 8. Day-to-day
-| Task | Command |
+## 8. Updating
+| Change | What to do |
 |---|---|
-| API logs | `gcloud run services logs read syncviewer-api --region=asia-south1 --limit=50` |
-| Run the collector now | `gcloud run jobs execute syncviewer-collector --region=asia-south1 --wait` |
-| Recent collector runs | `gcloud run jobs executions list --job=syncviewer-collector --region=asia-south1` |
-| Pause the schedule | `gcloud scheduler jobs pause syncviewer-collect --location=asia-south1` |
-| Resume the schedule | `gcloud scheduler jobs resume syncviewer-collect --location=asia-south1` |
-| List API revisions | `gcloud run revisions list --service=syncviewer-api --region=asia-south1` |
-| Roll back the API | `gcloud run services update-traffic syncviewer-api --to-revisions=<revision>=100 --region=asia-south1` |
-
-The same information is in the console under Cloud Run (services, jobs, logs, metrics).
-
-## 9. If the budget is reached
-The kill switch unlinks billing and all services stop. Data is in Supabase and is not affected. To
-restart: Billing > Account management > link the billing account to the project again, then run
-the deploy command.
-
-## 10. Taking it down
-Delete the project to stop everything and every possible charge at once:
-```bash
-gcloud projects delete <project-id>
-```
+| Frontend | Push to the published branch; Slate rebuilds automatically. |
+| Backend or generator | `deploy.py build` then `deploy.py deploy`. |
+| Database schema (new migration) | `cd backend && .venv/Scripts/alembic upgrade head`, then deploy the backend. |
+| Settings | Change them in the console (or `.env` + `deploy.py env`) and restart the service. |
 
 ## Troubleshooting
 | Symptom | Fix |
 |---|---|
-| `billing is not enabled` | Link a billing account to the project (step 2). |
-| A step fails right after an API was enabled | Wait a minute and run the deploy again. |
-| Cloud Build: permission denied pushing the image | Grant the Cloud Build service account the *Artifact Registry Writer* role, then deploy again. |
-| Login page works, data does not load (CORS error in the browser console) | Open the app through the printed link; another address must be added to `CORS_ORIGINS`. |
-| Password-reset email opens localhost | Supabase URL configuration (step 7). |
-| Health check says NOT RESPONDING | `gcloud run services logs read syncviewer-api --region=asia-south1`; usually a missing value in `.env`. |
+| `docker build` fails to connect | Start Docker Desktop. |
+| The CLI cannot find the image | Run `docker images` and check the tag; build again with `deploy.py build`. |
+| API URL shows an error page | Environment variables missing: AppSail > syncviewerapi > Logs, then step 5. |
+| Website loads but data does not (CORS error in the browser console) | `CORS_ORIGINS` must be exactly the Slate URL (no trailing slash). |
+| Login emails link to localhost | Supabase URL Configuration (step 7). |
+| Opening a deep link such as `/team` directly shows 404 | Open the site root once; the installed app then handles every page. |
+| Chat says it could not answer | It has 25 seconds per question on AppSail; ask a narrower question. |
 
 ## Backups
 `scripts/backup.sh` / `scripts/restore.sh`. Run `backup.sh` regularly against the session-pooler
