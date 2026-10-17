@@ -34,8 +34,3 @@ Thumbs.db
 
 # Coursework documents (kept out of the repo)
 docs/*.docx
-
-# Catalyst project files and generated console values
-deploy/catalyst/.secrets/
-deploy/catalyst/.catalystrc
-deploy/catalyst/catalyst-debug.log

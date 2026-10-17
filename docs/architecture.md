@@ -9,7 +9,7 @@ Browser (React PWA)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
                      workspace-scoped tools)         │
-Collector (local loop, or a scheduled Cloud Run job) ┘
+Collector (local loop, or a scheduled Container Apps job) ┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
                       └─► AzureAdapter (planned)
 ```
@@ -79,7 +79,7 @@ Metric samples are append-only: cursor is the newest `ts`; the client asks from 
 - supabase-js persists the session. A network failure while refreshing never logs the user out; only
   an explicit logout, a `SIGNED_OUT` event, or a definitive 401 after a refresh does. Logout deletes
   the user's IndexedDB database and all Cache Storage entries.
-- Security: strict CSP on the static host (`frontend/nginx.conf.template`, `public/_headers`), no
+- Security: strict CSP on the static host (`public/staticwebapp.config.json`, `frontend/nginx.conf.template`), no
   `dangerouslySetInnerHTML`, agent markdown rendered with `react-markdown` + `rehype-sanitize`.
 
 ## Collector cycle

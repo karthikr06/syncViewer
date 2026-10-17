@@ -17,6 +17,7 @@ NOT_CONFIGURED = ("The AI assistant is not configured on this server (no GOOGLE_
                   "Digests and rule-based recommendations still work.")
 FAILED = "Sorry, the assistant ran into a problem. Please try again in a moment."
 BUSY = "The AI assistant is busy or rate-limited right now. Please try again in a minute."
+TIMEOUT_SECONDS = 120
 
 _lock = threading.Lock()
 _state: dict = {}
@@ -104,7 +105,7 @@ def run_chat(session_factory: sessionmaker[Session], settings: Settings, workspa
         future = asyncio.run_coroutine_threadsafe(
             _chat(service, runner, str(user_id), str(workspace_id), role, sid, message), _loop())
         try:
-            text, tools, tin, tout = future.result(timeout=settings.agent_timeout_seconds)
+            text, tools, tin, tout = future.result(timeout=TIMEOUT_SECONDS)
         except TimeoutError:
             future.cancel()
             raise
