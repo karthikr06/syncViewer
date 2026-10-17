@@ -1,0 +1,18 @@
+name: Collect
+# Hourly trigger for the hosted collector: the app wakes up, answers 202 and collects in the
+# background. deploy/azure/deploy.py sets the API_URL variable and the COLLECTOR_TOKEN secret.
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    if: vars.API_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: >
+          curl -fsS --retry 3 --retry-delay 20 --max-time 90 -X POST
+          -H "X-Collector-Token: ${{ secrets.COLLECTOR_TOKEN }}"
+          "${{ vars.API_URL }}/api/v1/internal/collect"

@@ -9,7 +9,7 @@ Browser (React PWA)
                   │                                  ▲
                   └─ Agent (Google ADK, read-only,   │
                      workspace-scoped tools)         │
-Collector (local loop, or a scheduled Container Apps job) ┘
+Collector (local loop, or hourly in the API via a GitHub Actions trigger) ┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
                       └─► AzureAdapter (planned)
 ```
