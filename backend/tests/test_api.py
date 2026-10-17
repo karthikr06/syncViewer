@@ -441,3 +441,21 @@ def test_writes_commit_before_the_response_is_sent(env):
                     json={"name": "x", "metric": "cpu_percent", "operator": ">", "threshold": 1})
     assert r.status_code == 201
     assert "commit" in events and events.index("commit") < events.index("response")
+
+
+def test_scheduled_collect_needs_the_token_and_runs_in_background(env):
+    _, admin = env.user("boss@sched.com")
+    account = new_account(env, admin)
+    assert account["last_collected_at"] is None
+    app, c = env.client.app, env.client
+    assert c.post("/api/v1/internal/collect").status_code == 404  # no token configured
+    app.state.settings = replace(app.state.settings, collector_token="tok-123")
+    wrong = {"X-Collector-Token": "nope"}
+    assert c.post("/api/v1/internal/collect", headers=wrong).status_code == 404
+    r = c.post("/api/v1/internal/collect", headers={"X-Collector-Token": "tok-123"})
+    assert r.status_code == 202 and r.json() == {"status": "started"}
+    app.state.collector_thread.join(timeout=60)
+    with env.factory() as s:
+        assert s.get(CloudAccount, uuid.UUID(account["id"])).last_collected_at is not None
+    assert c.post("/api/v1/internal/collect?token=tok-123").status_code == 202
+    app.state.collector_thread.join(timeout=60)

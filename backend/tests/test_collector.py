@@ -362,3 +362,26 @@ def test_credentials_roundtrip_and_not_plaintext():
 def test_unimplemented_adapters_fail_clearly():
     with pytest.raises(NotImplementedError, match="AWS"):
         AwsAdapter().list_resources(None)
+
+
+def test_long_pause_catches_up_on_one_backfill_window_only(db, adapter_factory):
+    acc = add_account(db, uuid.uuid4(), "acc-paused")
+    with db() as s:
+        s.get(CloudAccount, acc).last_collected_at = NOW - timedelta(days=10)
+        s.commit()
+    windows = []
+
+    def recording(code):
+        adapter = adapter_factory(code)
+        fetch = adapter.fetch_metrics
+
+        def fetch_metrics(ref, resources, since, until):
+            windows.append(until - since)
+            return fetch(ref, resources, since, until)
+        adapter.fetch_metrics = fetch_metrics
+        return adapter
+
+    run_cycle(db, make_settings(), recording, now=NOW, backfill_hours=24)
+    assert windows and max(windows) <= timedelta(hours=24, minutes=15)  # window + overlap
+    with db() as s:
+        assert s.get(CloudAccount, acc).last_collected_at == NOW
