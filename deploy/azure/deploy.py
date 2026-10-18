@@ -248,7 +248,7 @@ def deploy(env: dict[str, str], skip_image: bool, skip_web: bool) -> None:
 
         if domain not in hostnames():
             az("staticwebapp", "hostname", "set", "-n", WEB, "-g", rg, "--hostname", domain,
-               check=False)
+               "-o", "none", check=False)
             if domain not in hostnames() and not DRY_RUN:
                 print(f"  WARNING: {domain} is not attached yet. Add a DNS CNAME record "
                       f"{domain} -> {web_host}, wait a few minutes and deploy again.")
@@ -257,9 +257,14 @@ def deploy(env: dict[str, str], skip_image: bool, skip_web: bool) -> None:
 
     print("\n[4/5] API with the demo cloud built in")
     url = arm_url(sub, rg, "containerApps", APP)
+    existed = exists("rest", "--method", "get", "--url", url)
     with tempfile.TemporaryDirectory() as tmp:
         arm_put(Path(tmp), url, APP,
                 app_spec(env, location, env_id, image, acr, registry_password, web_origins))
+    if existed:
+        # a replica that is already running keeps its old settings until the app restarts
+        for action in ("stop", "start"):
+            az("rest", "--method", "post", "--url", url.replace("?", f"/{action}?"), "-o", "none")
     api_url = "https://" + (az("rest", "--method", "get", "--url", url, "--query",
                                "properties.configuration.ingress.fqdn", "-o", "tsv",
                                capture=True) or "API.azurecontainerapps.io")
