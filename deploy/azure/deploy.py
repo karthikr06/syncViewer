@@ -161,10 +161,10 @@ def build_image(acr: str, rg: str, skip: bool) -> str:
 
 
 def app_spec(env: dict[str, str], location: str, env_id: str, image: str, acr: str,
-             registry_password: str, web_url: str) -> dict:
+             registry_password: str, web_origins: list[str]) -> dict:
     plain = {"APP_ENV": "production", "GENERATOR_URL": "http://127.0.0.1:8000/gen",
              "SUPABASE_URL": env["SUPABASE_URL"], "SUPABASE_JWKS_URL": env["SUPABASE_JWKS_URL"],
-             "CORS_ORIGINS": web_url, "ADMIN_EMAILS": env.get("ADMIN_EMAILS", ""),
+             "CORS_ORIGINS": ",".join(web_origins), "ADMIN_EMAILS": env.get("ADMIN_EMAILS", ""),
              "GEMINI_MODEL": env.get("GEMINI_MODEL", ""),
              "RAW_RETENTION_DAYS": env.get("RAW_RETENTION_DAYS") or "14"}
     secret = {"DATABASE_URL": env["DATABASE_URL"],
@@ -236,15 +236,30 @@ def deploy(env: dict[str, str], skip_image: bool, skip_web: bool) -> None:
     if not exists("staticwebapp", "show", "-n", WEB, "-g", rg):
         az("staticwebapp", "create", "-n", WEB, "-g", rg, "--location",
            env["AZURE_WEB_LOCATION"], "--sku", "Free", "-o", "none")
-    web_url = "https://" + (az("staticwebapp", "show", "-n", WEB, "-g", rg, "--query",
-                               "defaultHostname", "-o", "tsv", capture=True)
-                            or "WEB.azurestaticapps.net")
+    web_host = az("staticwebapp", "show", "-n", WEB, "-g", rg, "--query", "defaultHostname",
+                  "-o", "tsv", capture=True) or "WEB.azurestaticapps.net"
+    web_origins = [f"https://{web_host}"]
+    domain = env.get("AZURE_WEB_DOMAIN", "").strip().lower()
+    if domain:
+        # needs a DNS CNAME record <domain> -> web_host first; Azure then issues the certificate
+        def hostnames() -> list[str]:
+            return az("staticwebapp", "hostname", "list", "-n", WEB, "-g", rg, "--query",
+                      "[].name", "-o", "tsv", capture=True).split()
+
+        if domain not in hostnames():
+            az("staticwebapp", "hostname", "set", "-n", WEB, "-g", rg, "--hostname", domain,
+               check=False)
+            if domain not in hostnames() and not DRY_RUN:
+                print(f"  WARNING: {domain} is not attached yet. Add a DNS CNAME record "
+                      f"{domain} -> {web_host}, wait a few minutes and deploy again.")
+        web_origins.append(f"https://{domain}")
+    web_url = web_origins[-1]
 
     print("\n[4/5] API with the demo cloud built in")
     url = arm_url(sub, rg, "containerApps", APP)
     with tempfile.TemporaryDirectory() as tmp:
         arm_put(Path(tmp), url, APP,
-                app_spec(env, location, env_id, image, acr, registry_password, web_url))
+                app_spec(env, location, env_id, image, acr, registry_password, web_origins))
     api_url = "https://" + (az("rest", "--method", "get", "--url", url, "--query",
                                "properties.configuration.ingress.fqdn", "-o", "tsv",
                                capture=True) or "API.azurecontainerapps.io")
@@ -276,7 +291,7 @@ Done.
 
 Once, in Supabase > Authentication > URL Configuration:
   Site URL:       {web_url}
-  Redirect URLs:  {web_url}/**
+  Redirect URLs:  {"  ".join(o + "/**" for o in web_origins)}
 Collection runs hourly from GitHub Actions once collect.yml is on main; "Collect now" on the
 Accounts page fetches fresh data at any time.""")
 
