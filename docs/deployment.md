@@ -51,6 +51,7 @@ The deploy reads the same `.env` as local runs.
 | `AZURE_RESOURCE_GROUP` | `syncviewer-rg` (default) |
 | `AZURE_LOCATION` | `centralindia` (default), next to the database |
 | `AZURE_WEB_LOCATION` | `eastasia` (default); the site itself is served worldwide |
+| `AZURE_WEB_DOMAIN` | optional custom domain for the website, e.g. `syncviewer.example.me` |
 
 Secrets reach Azure through temporary files outside the repo and are stored as Container Apps
 secrets; they never appear on the command line or in git.
@@ -79,9 +80,17 @@ repository's Actions tab.
 
 ## 4. The public link
 `https://<name>.azurestaticapps.net`, printed at the end of the deploy. It is public and HTTPS;
-every page needs a login, and each person only sees their own workspace. A custom domain can be
-added for free in the portal (Static Web Apps > Custom domains). The first visit after a quiet
-period takes a few seconds while the API starts.
+every page needs a login, and each person only sees their own workspace. The first visit after a
+quiet period takes a few seconds while the API starts.
+
+**Custom domain (free HTTPS):**
+1. At your domain's DNS provider add a **CNAME** record: host `syncviewer` (the subdomain), value
+   the `<name>.azurestaticapps.net` address.
+2. Set `AZURE_WEB_DOMAIN=syncviewer.<your-domain>` in `.env` and deploy again with
+   `--skip-image --skip-web`. The script attaches the domain (Azure issues the certificate, which
+   can take a few minutes) and lets the API accept requests from it.
+3. Use the custom address in the Supabase URL configuration (step 5). The `azurestaticapps.net`
+   address keeps working.
 
 ## 5. Supabase settings
 Supabase > your project > **Authentication**:
