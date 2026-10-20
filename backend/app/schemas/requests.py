@@ -28,6 +28,8 @@ class AccountCreate(BaseModel):
         if self.provider == "prometheus":
             if not self.external_ref.startswith(("http://", "https://")):
                 raise ValueError("For Prometheus, external_ref is the server URL (https://...)")
+            if self.config.get("source", "node_exporter") not in ("node_exporter", "otel"):
+                raise ValueError("source must be node_exporter or otel")
             self.external_ref = self.external_ref.rstrip("/")
         return self
 

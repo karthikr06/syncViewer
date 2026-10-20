@@ -8,7 +8,7 @@ Authoritative definitions are the SQLAlchemy models in `backend/app/models/` and
 | workspaces | A team; owns all monitored data | PK id; name |
 | users | One row per Supabase user (id = auth user id), in one workspace | PK id; UNIQUE email; FK workspace_id (CASCADE); FK role_id (default 2 = developer); is_active |
 | workspace_invites | Email invited into a workspace as developer or viewer | FK workspace_id (CASCADE), role_id, invited_by; CHECK role_id IN (2,3); CHECK email lower-case; partial UNIQUE(email) WHERE accepted_at IS NULL |
-| providers | azure, aws, gcp, mock | UNIQUE code; is_enabled |
+| providers | azure, aws, gcp, mock, prometheus | UNIQUE code; is_enabled |
 | cloud_accounts (synced) | A workspace's connected cloud account | FK workspace_id (CASCADE), provider_id; UNIQUE(workspace, provider, external_ref); CHECK status; credentials_encrypted is Fernet ciphertext, never returned/audited; soft delete |
 | resource_types | e.g. `vm` per provider | UNIQUE(provider_id, code) |
 | vm_actions | Power actions taken from SyncViewer | FK resource_id (CASCADE), requested_by (SET NULL); CHECK action, status |

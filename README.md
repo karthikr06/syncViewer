@@ -5,8 +5,9 @@ place: inventory, health, uptime, metrics and alerts. Rule-based recommendations
 explain uptime and suggest improvements. The browser keeps a local copy of your data (IndexedDB), so
 the app opens instantly and keeps working on slow or no network.
 
-Data source for now is a **generator** that behaves like a fake cloud provider; a real Azure adapter
-is planned, along with support for other cloud providers.
+Data comes from a **generator** that behaves like a fake cloud provider, or from **Prometheus**, which
+watches real VMs in Azure, AWS, GCP or anywhere else (node_exporter or OpenTelemetry Collector):
+[docs/prometheus.md](docs/prometheus.md).
 
 ## Problem statement and objectives
 Teams with VMs in several clouds check several consoles to answer "is everything up, and what should

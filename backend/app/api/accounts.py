@@ -15,6 +15,7 @@ from app.api.deps import (
     rate_limited,
     require_writer,
 )
+from app.collector.adapters.prometheus import PrometheusError
 from app.collector.cycle import process_account
 from app.collector.dto import AccountRef
 from app.core.config import Settings
@@ -70,6 +71,8 @@ def create_account(body: AccountCreate, request: Request,
         dtos = adapter.list_resources(ref)
     except NotImplementedError as exc:
         raise HTTPException(400, f"The {provider.code} integration is not available yet.") from exc
+    except PrometheusError as exc:
+        raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         log.warning("discovery failed for new account: %s", type(exc).__name__)
         raise HTTPException(502, "Could not reach the cloud provider. Check the account "
@@ -122,6 +125,8 @@ def collect_now(account_id: uuid.UUID, request: Request,
                                    datetime.now(UTC))
     except NotImplementedError as exc:
         raise HTTPException(400, "This provider integration is not available yet.") from exc
+    except PrometheusError as exc:
+        raise HTTPException(400, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         log.warning("collect-now failed: %s", type(exc).__name__)
         raise HTTPException(502, "Collection failed; the provider could not be reached.") from exc

@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { canWrite, useAuth, useDb } from "../auth/AuthProvider";
-import { ACTION_INFO } from "../components/VmActions";
+import { ACTION_INFO, isReadOnlySource } from "../components/VmActions";
 import { Badge, Empty, ErrorNote, PageHeader, severityTone } from "../components/ui";
 import { friendlyError } from "../lib/api";
 import { setRecommendationStatus, vmAction } from "../lib/mutations";
@@ -12,7 +12,7 @@ import { useVmIndex, VmText, type VmIndex } from "../lib/vmLinks";
 
 /** The action that fixes a recommendation directly from SyncViewer, if there is one. */
 export function fixFor(rec: Recommendation, resource?: Resource): VmActionName | null {
-  if (rec.status !== "new" || !resource) return null;
+  if (rec.status !== "new" || !resource || isReadOnlySource(resource)) return null;
   if (rec.category === "waste" && resource.power_state === "stopped") return "deallocate";
   return null;
 }

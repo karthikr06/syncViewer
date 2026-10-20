@@ -35,6 +35,15 @@
 - **VM power actions go through the provider adapter** and are recorded in `vm_actions`; the generator keeps an in-memory action log so demo VMs really change state and metrics. The AI assistant stays read-only (it cannot take VM actions).
 - **One-click fixes:** only advice with a single safe, reversible action gets a fix button (stopped-but-billed -> deallocate). Waste advice closes itself when the VM is no longer stopped; the re-raise cooldown applies to dismissed advice only, so a fixed problem that comes back is reported again.
 
+## Prometheus
+- **One read-only adapter instead of one per cloud for monitoring:** Prometheus already discovers VMs in Azure, AWS and GCP (or receives them from OpenTelemetry Collectors), so `PrometheusAdapter` covers all three for inventory and metrics. VM actions would still need a cloud API.
+- **Two presets, node_exporter by default:** scraping gives a real `up` signal; OpenTelemetry pushes work behind firewalls but a quiet VM can only be read as "down". OTel inventory is the VMs that sent data in the last 7 days, and the newest 2 minutes are not read so late data never becomes a stored 0.
+- **An empty target list is an error, not "all VMs deleted":** a wrong job or a Prometheus outage would otherwise tombstone every VM.
+- **One range query per metric for the whole account** (5-minute steps), so a collection costs six requests however many VMs there are.
+- **Disk is measured like `df`** (root-reserved blocks count as neither used nor free) and OTel memory leaves out the overlapping `slab_*` states; both checked against node_exporter on the same machine.
+- **URL guard:** the API calls a URL that users type in, so outside development it must be HTTPS and resolve to a public address (no `169.254.169.254` metadata service, no private networks); no redirects; responses capped at 20 MB. `ALLOW_PRIVATE_URLS` turns the address check off for local Prometheus servers.
+- **No power state from Prometheus by default:** a VM that does not answer is "running" and unavailable, so it gets incidents. A `power_state` target label (from cloud discovery) overrides it; stopped AWS/GCP instances map to "deallocated" because they are not billed for compute.
+
 ## API and AI assistant
 - **App factory:** `uvicorn app.main:create_app --factory`, so tests build the app with explicit settings/session factory/adapters.
 - **In-memory rate limiting** (per process, per user): fine for a single API instance; use a shared store if the API is scaled out.

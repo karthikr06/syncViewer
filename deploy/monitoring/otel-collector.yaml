@@ -1,0 +1,31 @@
+# Local demo OpenTelemetry Collector: host metrics pushed to Prometheus by remote write.
+# On a real VM use the same file with the endpoint of your Prometheus (or Grafana Cloud), and
+# replace the two demo labels with the cloud detector, e.g. `detectors: [azure, system]`,
+# which fills in cloud.region and host.type on its own.
+receivers:
+  hostmetrics:
+    collection_interval: 30s
+    scrapers: {cpu: {}, memory: {}, filesystem: {}, network: {}}
+
+processors:
+  resourcedetection:
+    detectors: [system]
+  resource:
+    attributes:
+      # job = service.name and instance = service.instance.id in Prometheus
+      - {key: service.name, value: hosts, action: upsert}
+      - {key: service.instance.id, from_attribute: host.name, action: upsert}
+      - {key: cloud.region, value: centralindia, action: insert}  # demo only
+      - {key: host.type, value: Standard_B2s, action: insert}     # demo only
+  batch: {}
+
+exporters:
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+
+service:
+  pipelines:
+    metrics:
+      receivers: [hostmetrics]
+      processors: [resourcedetection, resource, batch]
+      exporters: [prometheusremotewrite]

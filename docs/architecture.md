@@ -11,7 +11,8 @@ Browser (React PWA)
                      workspace-scoped tools)         │
 Collector ─────────────────────────────────────────────┘
    └─ ProviderAdapter ──► MockAdapter ──► Generator (fake cloud)
-                      └─► AzureAdapter (planned)
+                      ├─► PrometheusAdapter ──► Prometheus ◄── VMs (node_exporter / OTel)
+                      └─► AzureAdapter (planned, for VM actions)
 ```
 
 | Process | Code | Talks to |
@@ -20,6 +21,9 @@ Collector ───────────────────────�
 | Collector | `backend/app/collector/` | Postgres, provider adapter |
 | Generator | `generator/syncgen/` | nothing (pure function of time) |
 | Frontend | `frontend/` | API, Supabase Auth |
+
+The `PrometheusAdapter` is read-only: inventory and metrics for any VM Prometheus knows, through
+its query API ([prometheus.md](prometheus.md)).
 
 The collector reads and writes Postgres through the same repositories as the API. Locally it runs
 as its own process (`app.collector.serve`, every `COLLECT_INTERVAL_SECONDS`).

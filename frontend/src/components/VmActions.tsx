@@ -14,6 +14,11 @@ export const ACTION_INFO: Record<VmActionName, { label: string; explain: string;
   deallocate: { label: "Deallocate", explain: "Stops the VM and releases its compute, so it is no longer billed. Disks are kept.", danger: true },
 };
 
+/** VMs watched through Prometheus can't be started or stopped from SyncViewer. */
+export function isReadOnlySource(resource: Resource): boolean {
+  return resource.attributes?.provider === "prometheus";
+}
+
 /** Which actions make sense for a power state, most useful first. */
 export function actionsFor(power: Resource["power_state"]): VmActionName[] {
   if (power === "running") return ["restart", "stop", "deallocate"];
@@ -35,6 +40,7 @@ export function VmActions({ resource }: { resource: Resource }) {
     queryKey: ["vm-actions", resource.id],
     queryFn: () => api<VmAction[]>(`/resources/${resource.id}/actions`),
     retry: false,
+    enabled: !isReadOnlySource(resource),
   });
 
   const run = async (action: VmActionName) => {
@@ -52,6 +58,18 @@ export function VmActions({ resource }: { resource: Resource }) {
       void qc.invalidateQueries({ queryKey: ["vm-actions", resource.id] });
     }
   };
+
+  if (isReadOnlySource(resource)) {
+    return (
+      <section className="card">
+        <h2 className="font-semibold">Power actions</h2>
+        <p className="mt-2 text-sm text-muted">
+          This VM is monitored through Prometheus, which is read-only, so SyncViewer can't start or stop it. Use your
+          cloud provider's console instead.
+        </p>
+      </section>
+    );
+  }
 
   const available = actionsFor(resource.power_state);
   return (
