@@ -15,7 +15,7 @@ database, computes uptime/incidents/alerts, derives evidence-backed recommendati
 all through a secure API and an offline-first web app.
 
 **Scope:** VM inventory, metrics (availability, CPU, memory, disk, network), uptime rollups,
-incidents, alert rules, recommendations, daily/weekly digests, AI chat, RBAC (admin/user/viewer).
+incidents, alert rules, recommendations, daily/weekly digests, AI chat, RBAC (admin/developer/viewer).
 
 ## Architecture
 | Process | Dir | Role | Port |
