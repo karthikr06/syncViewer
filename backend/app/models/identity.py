@@ -94,7 +94,7 @@ class WorkspaceInvite(Base):
 class Provider(Base):
     __tablename__ = "providers"
     __table_args__ = (
-        CheckConstraint("code IN ('azure','aws','gcp','mock')", name="code_valid"),
+        CheckConstraint("code IN ('azure','aws','gcp','mock','prometheus')", name="code_valid"),
     )
 
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)

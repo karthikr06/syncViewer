@@ -48,6 +48,7 @@ class Settings:
     supabase_url: str = field(default="")
     sync_overlap: int = field(default=500)
     collector_token: str = field(default="")
+    allow_private_urls: bool = field(default=False)  # e.g. a Prometheus on localhost
 
     @property
     def is_production(self) -> bool:
@@ -67,6 +68,7 @@ def load_settings(required: list[str] | None = None) -> Settings:
     ]
     _require(required)
     env = os.environ.get
+    production = env("APP_ENV", "development") == "production"
     return Settings(
         app_env=env("APP_ENV", "development"),
         database_url=normalize_db_url(env("DATABASE_URL", "")),
@@ -84,6 +86,8 @@ def load_settings(required: list[str] | None = None) -> Settings:
         google_api_key=env("GOOGLE_API_KEY", ""),
         gemini_model=env("GEMINI_MODEL", "gemini-3.5-flash-lite"),
         collector_token=env("COLLECTOR_TOKEN", ""),
+        allow_private_urls=env("ALLOW_PRIVATE_URLS", "false" if production else "true")
+        .lower() == "true",
     )
 
 

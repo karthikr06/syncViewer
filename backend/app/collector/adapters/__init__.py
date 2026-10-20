@@ -1,5 +1,6 @@
 from app.collector.adapters.base import ActionRejected, ProviderAdapter
 from app.collector.adapters.mock import MockAdapter
+from app.collector.adapters.prometheus import PrometheusAdapter
 from app.collector.adapters.stubs import AwsAdapter, AzureAdapter, GcpAdapter
 from app.core.config import Settings
 
@@ -7,6 +8,8 @@ from app.core.config import Settings
 def get_adapter(provider_code: str, settings: Settings) -> ProviderAdapter:
     if provider_code == "mock":
         return MockAdapter(settings.generator_url, settings.generator_api_key)
+    if provider_code == "prometheus":
+        return PrometheusAdapter(allow_private=settings.allow_private_urls)
     if provider_code == "azure":
         return AzureAdapter()
     if provider_code == "aws":
@@ -16,4 +19,4 @@ def get_adapter(provider_code: str, settings: Settings) -> ProviderAdapter:
     raise ValueError(f"unknown provider {provider_code!r}")
 
 
-__all__ = ["ActionRejected", "MockAdapter", "ProviderAdapter", "get_adapter"]
+__all__ = ["ActionRejected", "MockAdapter", "PrometheusAdapter", "ProviderAdapter", "get_adapter"]
