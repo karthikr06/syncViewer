@@ -1,5 +1,6 @@
 # Monitoring real VMs through Prometheus
 
+
 SyncViewer can watch real machines in **Azure, AWS, GCP or anywhere else** through one
 **Prometheus** account. Prometheus (or any server with its query API: Grafana Cloud, Thanos,
 Mimir, VictoriaMetrics) holds the metrics; SyncViewer reads them every collection and runs the
@@ -43,6 +44,8 @@ SyncViewer, **Cloud accounts > Add account**:
 
 Press **Collect now** after a few minutes (rates need 5 minutes of data). `offline-vm` shows as
 unavailable with an open outage incident.
+
+On Windows, run the command from the repository folder in PowerShell with Docker Desktop running.
 
 Private addresses such as `localhost` are allowed only while `ALLOW_PRIVATE_URLS` is on: by
 default in development, never in production. A hosted SyncViewer needs a Prometheus with a public
