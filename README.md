@@ -1,36 +1,58 @@
 # SyncViewer
 
-A multi-cloud VM monitor (BCSE307L Database Systems, VIT). Add cloud accounts and see every VM in one
-place: inventory, health, uptime, metrics and alerts. Rule-based recommendations and an AI assistant
-explain uptime and suggest improvements. The browser keeps a local copy of your data (IndexedDB), so
-the app opens instantly and keeps working on slow or no network.
+Keeping an eye on virtual machines across Azure, AWS and Google Cloud usually means juggling three
+consoles. SyncViewer puts them all in one place: which VMs are up, how busy they are, their uptime,
+incidents and alerts. It also tells you what's worth fixing (an idle VM that's too big, a disk about
+to fill up, a stopped VM you're still paying for), and you can ask its AI assistant things like
+"which VM had the most downtime this week?".
 
-Data comes from a **generator** that behaves like a fake cloud provider, or from **Prometheus**, which
-watches real VMs in Azure, AWS, GCP or anywhere else (node_exporter or OpenTelemetry Collector):
-[docs/prometheus.md](docs/prometheus.md).
+I built it for the Database Systems course (BCSE307L) at VIT, so a lot of the interesting work lives
+in the PostgreSQL database: triggers, a stored procedure for uptime, views and row-level security.
 
-## Problem statement and objectives
-Teams with VMs in several clouds check several consoles to answer "is everything up, and what should
-we fix?". SyncViewer collects inventory and metrics from provider adapters into one relational
-database, computes uptime/incidents/alerts, derives evidence-backed recommendations and exposes it
-all through a secure API and an offline-first web app.
+**Where the data comes from:** a built-in demo cloud with VMs that misbehave on purpose, or
+**Prometheus** for real machines ([setup guide](docs/prometheus.md)).
 
-**Scope:** VM inventory, metrics (availability, CPU, memory, disk, network), uptime rollups,
-incidents, alert rules, recommendations, daily/weekly digests, AI chat, RBAC (admin/developer/viewer).
+## What's in each folder
+| Folder | What it does |
+|---|---|
+| `frontend/` | The website (React). Keeps a copy of your data in the browser so it opens instantly, even offline. |
+| `backend/` | The API (FastAPI) and the collector that fetches VM data every hour. Database migrations live in `backend/alembic/`. |
+| `generator/` | The demo cloud: fake VMs with known problems, so you can try everything without a cloud account. |
+| `deploy/` | Scripts for deploying to Azure, plus a local Prometheus setup in `deploy/monitoring/`. |
+| `docs/` | Architecture, ER diagram, data dictionary and guides. |
+| `scripts/` | Database backup and restore (`pg_dump` / `pg_restore`). |
+| `.github/workflows/` | GitHub Actions: tests on every push, website publishing, the hourly collection. |
 
-## Architecture
-| Process | Dir | Role | Port |
-|---|---|---|---|
-| API | `backend/` | FastAPI: auth, CRUD, delta sync, AI agent | 8000 |
-| Collector | `backend/app/collector/` | Scheduled ingestion, rollups, incidents, alerts, rules | - |
-| Generator | `generator/` | Fake cloud provider (deterministic, with ground truth) | 8100 |
-| Frontend | `frontend/` | React PWA, IndexedDB cache | 5173 dev / 8080 docker |
-| Supabase | managed | Postgres + Auth only | - |
+## Run it on your computer
+You'll need Git, Python 3.12+, Node.js 20+ and a free [Supabase](https://supabase.com) project.
 
-Diagram and design notes: [docs/architecture.md](docs/architecture.md). Database:
-[ER diagram](docs/er-diagram.md), [data dictionary](docs/data-dictionary.md).
+1. Clone the repo and add your settings:
+   ```bash
+   git clone https://github.com/karthikr06/syncViewer.git
+   cd syncViewer
+   copy .env.example .env      # then fill in your Supabase details
+   ```
+2. Install the backend and create the database tables:
+   ```bash
+   cd backend
+   python -m venv .venv
+   .venv\Scripts\pip install -e .
+   .venv\Scripts\alembic upgrade head
+   ```
+3. Start everything: double-click `start-local.bat` (Windows), or run `docker compose up -d` if
+   you have Docker.
+4. Open http://localhost:5173 (or http://localhost:8080 with Docker), sign up, add a demo account
+   and press **Collect now**.
 
-## Tech stack
-Python 3.12+ (FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2, APScheduler, Google ADK), PostgreSQL
-(Supabase), React + Vite + TypeScript + Tailwind, TanStack Query, Dexie, vite-plugin-pwa, Recharts,
-Docker, GitHub Actions.
+## Run it in the cloud
+SyncViewer is three pieces, so it runs on pretty much any cloud:
+
+- **The backend** is a Docker image (`deploy/azure/Dockerfile`) that holds the API, the collector and
+  the demo cloud. Any container host works: Azure Container Apps, Google Cloud Run, Render, Railway,
+  Fly.io.
+- **The website** is a static build (`npm run build` in `frontend/`), so any static host works:
+  Azure Static Web Apps, Netlify, Vercel.
+- **The database** is PostgreSQL on Supabase.
+
+On Azure it's one command: `python deploy/azure/deploy.py`. The full walkthrough is in
+[docs/deployment.md](docs/deployment.md).
