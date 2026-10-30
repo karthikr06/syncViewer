@@ -1,0 +1,29 @@
+# Local demo Prometheus for SyncViewer (docker compose --profile monitoring up -d).
+# Two ways VMs report, one SyncViewer account each:
+#   job "node"  - Prometheus scrapes node_exporter (account source: node_exporter)
+#   job "hosts" - an OpenTelemetry Collector pushes by remote write (account source: otel)
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        # labels SyncViewer reads; with cloud discovery these come from relabel_configs
+        labels: {region: "centralindia", instance_type: "Standard_B2s", cloud: "azure"}
+      - targets: ["offline-vm:9100"]  # nothing runs here: shows how a down VM looks
+        labels: {region: "eastus", instance_type: "Standard_B1s", cloud: "azure"}
+
+  # Real VMs in Azure: Prometheus lists them itself. Uncomment and fill in a service principal
+  # with the Reader role; each VM needs node_exporter on port 9100, reachable from Prometheus.
+  # - job_name: node
+  #   azure_sd_configs:
+  #     - subscription_id: "<subscription id>"
+  #       tenant_id: "<tenant id>"
+  #       client_id: "<app id>"
+  #       client_secret: "<secret>"
+  #       port: 9100
+  #   relabel_configs:
+  #     - {source_labels: [__meta_azure_machine_location], target_label: region}
+  #     - {source_labels: [__meta_azure_machine_size], target_label: instance_type}
+  #     - {target_label: cloud, replacement: azure}

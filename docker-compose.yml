@@ -49,3 +49,31 @@ services:
       CSP_CONNECT_SRC: "'self' ${VITE_SUPABASE_URL} ${VITE_API_URL:-http://localhost:8000}"
     ports: ["8080:80"]
     restart: unless-stopped
+
+  # ---- optional local monitoring demo: docker compose --profile monitoring up -d ----
+  # Add a Prometheus account at http://localhost:9090 (http://prometheus:9090 from the api
+  # container): source node_exporter for job "node", or OpenTelemetry for job "hosts".
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver"]
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: ["monitoring"]
+    hostname: demo-vm-1
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.130.0
+    profiles: ["monitoring"]
+    hostname: demo-vm-2
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./deploy/monitoring/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [prometheus]
+    restart: unless-stopped

@@ -1,9 +1,9 @@
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-PROVIDERS = Literal["mock", "azure", "aws", "gcp"]
+PROVIDERS = Literal["mock", "prometheus", "azure", "aws", "gcp"]
 METRICS = Literal["availability", "cpu_percent", "memory_percent", "disk_used_percent",
                   "network_in_bytes", "network_out_bytes"]
 SEVERITY = Literal["info", "warning", "critical"]
@@ -22,6 +22,16 @@ class AccountCreate(BaseModel):
         if "scenario" in v and v["scenario"] not in ("small", "medium", "large"):
             raise ValueError("scenario must be small, medium or large")
         return v
+
+    @model_validator(mode="after")
+    def _prometheus(self) -> "AccountCreate":
+        if self.provider == "prometheus":
+            if not self.external_ref.startswith(("http://", "https://")):
+                raise ValueError("For Prometheus, external_ref is the server URL (https://...)")
+            if self.config.get("source", "node_exporter") not in ("node_exporter", "otel"):
+                raise ValueError("source must be node_exporter or otel")
+            self.external_ref = self.external_ref.rstrip("/")
+        return self
 
 
 class AccountUpdate(BaseModel):
